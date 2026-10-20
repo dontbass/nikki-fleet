@@ -3,6 +3,9 @@ include $(TOPDIR)/rules.mk
 
 PKG_VERSION:=0.1.8
 PKG_RELEASE:=1
+# translations get the app version (luci.mk would derive it from git, which is
+# not available in the release build and yields "0")
+PKG_PO_VERSION:=$(PKG_VERSION)
 PKG_LICENSE:=GPL-3.0-or-later
 PKG_MAINTAINER:=dontbass <https://github.com/dontbass>
 

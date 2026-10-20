@@ -189,7 +189,9 @@ done
 say "устанавливаю nikki-fleet"
 if [ "$PM" = opkg ]; then
 	opkg update >/dev/null 2>&1 || true
-	opkg install "$TMP"/*.ipk
+	# --force-downgrade: older releases versioned translations by date (26.x),
+	# newer ones by the app version; the release files are always the ones to keep
+	opkg install --force-downgrade "$TMP"/*.ipk
 else
 	apk update >/dev/null 2>&1 || true
 	apk add --allow-untrusted "$TMP"/*.apk
