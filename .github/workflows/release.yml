@@ -1,16 +1,41 @@
 name: Release
 
+# A release is made when VERSION changes on main (or by a v* tag, or manually).
 on:
   push:
+    branches: [ main ]
+    paths: [ VERSION ]
     tags: [ 'v*' ]
+  workflow_dispatch:
 
 permissions:
   contents: write
   packages: write
 
 jobs:
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      tag: ${{ steps.v.outputs.tag }}
+      skip: ${{ steps.v.outputs.skip }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = tag ]; then V="${GITHUB_REF_NAME#v}"; else V="$(cat VERSION | tr -d '[:space:]')"; fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "tag=v$V" >> "$GITHUB_OUTPUT"
+          if [ "${GITHUB_REF_TYPE}" != tag ] && git ls-remote --exit-code --tags origin "refs/tags/v$V" >/dev/null; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"; echo "v$V already released"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
   packages:
     name: packages ${{ matrix.branch }}
+    needs: meta
+    if: needs.meta.outputs.skip != 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -35,6 +60,8 @@ jobs:
           if-no-files-found: error
 
   panel-binaries:
+    needs: meta
+    if: needs.meta.outputs.skip != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -44,7 +71,7 @@ jobs:
       - name: build
         working-directory: panel
         run: |
-          V=${GITHUB_REF_NAME#v}
+          V=${{ needs.meta.outputs.version }}
           mkdir -p ../dist
           for t in linux/amd64 linux/arm64 linux/arm/7; do
             os=${t%%/*}; rest=${t#*/}; arch=${rest%%/*}; arm=${rest#*/}; [ "$arm" = "$rest" ] && arm=""
@@ -57,6 +84,8 @@ jobs:
           path: dist/*
 
   docker:
+    needs: meta
+    if: needs.meta.outputs.skip != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -72,13 +101,13 @@ jobs:
           context: panel
           platforms: linux/amd64,linux/arm64
           push: true
-          build-args: VERSION=${{ github.ref_name }}
+          build-args: VERSION=${{ needs.meta.outputs.version }}
           tags: |
-            ghcr.io/${{ github.repository_owner }}/nikki-fleet-panel:${{ github.ref_name }}
+            ghcr.io/${{ github.repository_owner }}/nikki-fleet-panel:${{ needs.meta.outputs.tag }}
             ghcr.io/${{ github.repository_owner }}/nikki-fleet-panel:latest
 
   release:
-    needs: [ packages, panel-binaries ]
+    needs: [ meta, packages, panel-binaries ]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -87,5 +116,8 @@ jobs:
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.meta.outputs.tag }}
+          name: nikki-fleet ${{ needs.meta.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           files: assets/*
           generate_release_notes: true

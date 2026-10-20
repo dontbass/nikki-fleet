@@ -52,4 +52,4 @@ make package/nikki-fleet/compile package/luci-app-nikki-fleet/compile V=s
 
 ## Релиз
 
-Тег `vX.Y.Z` → GitHub Actions собирает пакеты, бинарники панели (amd64, arm64, armv7), Docker-образ `ghcr.io/dontbass/nikki-fleet-panel` и публикует релиз. Перед тегом обновите `PKG_VERSION` в Makefile пакетов, `VERSION` в `ops.uc` и `version` в `panel/main.go`.
+Измените версию в файле `VERSION` и закоммитьте в `main` (или запушьте тег `vX.Y.Z`) → GitHub Actions создаёт тег, собирает пакеты, бинарники панели (amd64, arm64, armv7), Docker-образ `ghcr.io/dontbass/nikki-fleet-panel` и публикует релиз. Перед тегом обновите `PKG_VERSION` в Makefile пакетов, `VERSION` в `ops.uc` и `version` в `panel/main.go`.
