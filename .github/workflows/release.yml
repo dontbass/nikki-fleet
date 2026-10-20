@@ -31,6 +31,14 @@ jobs:
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
+      - name: create release
+        if: steps.v.outputs.skip != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.v.outputs.tag }}
+          name: nikki-fleet ${{ steps.v.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
 
   packages:
     name: packages ${{ matrix.branch }}
@@ -51,13 +59,13 @@ jobs:
           EXTRA_FEEDS: src-git|nikki|https://github.com/nikkinikki-org/OpenWrt-nikki.git;main
           NO_REFRESH_CHECK: true
           INDEX: 0
-      - uses: actions/upload-artifact@v7
+      - uses: softprops/action-gh-release@v2
         with:
-          name: packages-${{ matrix.branch }}
-          path: |
+          tag_name: ${{ needs.meta.outputs.tag }}
+          fail_on_unmatched_files: false
+          files: |
             bin/packages/x86_64/nikki_fleet/*.ipk
             bin/packages/x86_64/nikki_fleet/*.apk
-          if-no-files-found: error
 
   panel-binaries:
     needs: meta
@@ -78,10 +86,10 @@ jobs:
             name=nikki-fleet-panel-${os}-${arch}${arm:+v$arm}
             GOOS=$os GOARCH=$arch GOARM=$arm CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=$V" -o ../dist/$name .
           done
-      - uses: actions/upload-artifact@v7
+      - uses: softprops/action-gh-release@v2
         with:
-          name: panel-binaries
-          path: dist/*
+          tag_name: ${{ needs.meta.outputs.tag }}
+          files: dist/*
 
   docker:
     needs: meta
@@ -105,19 +113,3 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/nikki-fleet-panel:${{ needs.meta.outputs.tag }}
             ghcr.io/${{ github.repository_owner }}/nikki-fleet-panel:latest
-
-  release:
-    needs: [ meta, packages, panel-binaries ]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v8
-        with:
-          path: assets
-          merge-multiple: true
-      - uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.meta.outputs.tag }}
-          name: nikki-fleet ${{ needs.meta.outputs.tag }}
-          target_commitish: ${{ github.sha }}
-          files: assets/*
-          generate_release_notes: true
