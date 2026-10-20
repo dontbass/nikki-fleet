@@ -15,9 +15,12 @@ define Package/nikki-fleet
   CATEGORY:=Network
   TITLE:=Remote management agent and safe config tools for Nikki
   URL:=https://github.com/dontbass/nikki-fleet
-  DEPENDS:=+nikki +ucode +ucode-mod-fs +curl +yq
   PKGARCH:=all
 endef
+
+# Runtime-only dependencies: these are scripts, so the SDK does not need to
+# compile nikki/mihomo/yq just to package them (keeps CI builds fast).
+EXTRA_DEPENDS:=nikki, ucode, ucode-mod-fs, curl, yq
 
 define Package/nikki-fleet/description
   CLI and agent for Nikki (mihomo on OpenWrt): safe profile editing with
