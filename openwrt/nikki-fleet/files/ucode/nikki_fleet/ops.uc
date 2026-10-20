@@ -5,7 +5,7 @@
 
 import { readfile, writefile, popen, stat, lsdir, mkdir, unlink, rename } from 'fs';
 
-export const VERSION = '0.1.2';
+export const VERSION = '0.1.3';
 
 // NF_ROOT lets tests run against a fake filesystem root.
 const ROOT = getenv('NF_ROOT') ?? '';
@@ -32,7 +32,7 @@ const BACKUPS_KEEP = 10;
 
 export function q(s) {
 	return "'" + replace(`${s}`, "'", "'\\''") + "'";
-}
+};
 
 export function sh(cmd) {
 	const p = popen(cmd + ' 2>&1', 'r');
@@ -41,7 +41,7 @@ export function sh(cmd) {
 	const out = p.read('all') ?? '';
 	const code = p.close();
 	return { code: code ?? 0, out: out };
-}
+};
 
 function tail(s, n) {
 	s = `${s ?? ''}`;
@@ -50,12 +50,12 @@ function tail(s, n) {
 
 export function uid() {
 	return trim(readfile('/proc/sys/kernel/random/uuid') ?? sprintf('%d', time()));
-}
+};
 
 export function tmpname(tag) {
 	mkdir(P.tmp);
 	return sprintf('%s/nikki-fleet-%s-%s', P.tmp, tag, uid());
-}
+};
 
 function uci_cmd() {
 	return P.uci_conf ? 'uci -q -c ' + q(P.uci_conf) : 'uci -q';
@@ -64,22 +64,22 @@ function uci_cmd() {
 export function uci_get(key) {
 	const r = sh(uci_cmd() + ' get ' + q(key));
 	return r.code == 0 ? trim(r.out) : null;
-}
+};
 
 export function uci_set(key, val) {
 	return sh(uci_cmd() + ' set ' + q(key + '=' + val)).code == 0;
-}
+};
 
 export function uci_commit(pkg) {
 	return sh(uci_cmd() + ' commit ' + q(pkg)).code == 0;
-}
+};
 
 export function yaml_to_json(path) {
 	const r = sh('yq -M -p yaml -o json ' + q(path));
 	if (r.code != 0)
 		return null;
 	return json(r.out);
-}
+};
 
 function ts() {
 	const t = localtime(time());
@@ -98,7 +98,7 @@ export function resolve(kind, name) {
 	if (kind == 'subscription' && match(name, RE_SECTION))
 		return P.subs + '/' + name + '.yaml';
 	return null;
-}
+};
 
 export function active_profile() {
 	const v = uci_get('nikki.config.profile') ?? '';
@@ -107,7 +107,7 @@ export function active_profile() {
 		return { kind: '', name: '' };
 	const kind = substr(v, 0, i), name = substr(v, i + 1);
 	return { kind: kind, name: name, path: resolve(kind, name) };
-}
+};
 
 export function list_profiles() {
 	const act = active_profile(), out = [];
@@ -127,7 +127,7 @@ export function list_profiles() {
 			size: st?.size, mtime: st?.mtime, active: act.kind == 'subscription' && act.name == m[1] });
 	}
 	return out;
-}
+};
 
 export function read_profile(kind, name) {
 	const path = resolve(kind, name);
@@ -137,7 +137,7 @@ export function read_profile(kind, name) {
 	if (content == null)
 		return { ok: false, error: 'profile not found' };
 	return { ok: true, kind: kind, name: name, content: content };
-}
+};
 
 export function test_config(content) {
 	if (type(content) != 'string' || !length(content))
@@ -150,7 +150,7 @@ export function test_config(content) {
 	const r = sh(MIHOMO + ' -d ' + q(P.run) + ' -f ' + q(f) + ' -t');
 	unlink(f);
 	return { ok: r.code == 0, output: tail(r.out, 4000) };
-}
+};
 
 /* ---------- backups ---------- */
 
@@ -172,7 +172,7 @@ export function backup(kind, name) {
 	while (length(all) > BACKUPS_KEEP)
 		unlink(P.backups + '/' + shift(all));
 	return id;
-}
+};
 
 export function list_backups(kind, name) {
 	const pre = backup_prefix(kind, name), out = [];
@@ -181,7 +181,7 @@ export function list_backups(kind, name) {
 		push(out, { id: f, size: st?.size, mtime: st?.mtime });
 	}
 	return out;
-}
+};
 
 /* ---------- mihomo API ---------- */
 
@@ -235,7 +235,7 @@ export function api(method, path, body, timeout) {
 	if (length(text))
 		try { data = json(text); } catch (e) { data = { raw: tail(text, 2000) }; }
 	return { ok: code >= 200 && code < 300, code: code, data: data };
-}
+};
 
 function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
 export function logs_tail(which, lines) {
@@ -248,17 +248,17 @@ export function logs_tail(which, lines) {
 		}
 	}
 	return { ok: false, content: '' };
-}
+};
 
 /* ---------- nikki service ---------- */
 
 export function reload_nikki() {
 	return sh(q(P.init) + ' reload');
-}
+};
 
 export function nikki_running() {
 	return sh('pidof ' + q(replace(MIHOMO, /.*\//, ''))).code == 0;
-}
+};
 
 export function wait_api(seconds) {
 	const until = time() + seconds;
@@ -269,7 +269,7 @@ export function wait_api(seconds) {
 		sleep(1000);
 	}
 	return false;
-}
+};
 
 // Write a profile safely: test -> backup -> write -> (activate) -> reload -> check -> rollback on failure.
 export function write_profile(opts) {
@@ -339,7 +339,7 @@ export function write_profile(opts) {
 	const back = turned_on ? true : wait_api(opts.wait ?? 25);
 	return { ok: false, stage: 'reload', error: 'mihomo did not start with the new config, previous version restored',
 		rolled_back: true, recovered: back, backup: bk, log: log };
-}
+};
 
 // Turn Nikki on (with a health check; turned back off if mihomo does not start) or off.
 export function set_enabled(on) {
@@ -362,7 +362,7 @@ export function set_enabled(on) {
 	uci_commit('nikki');
 	sh(q(P.init) + ' stop');
 	return { ok: false, error: 'mihomo did not start, Nikki turned off again', log: log };
-}
+};
 
 export function restore_backup(kind, name, id, reload) {
 	const pre = backup_prefix(kind, name);
@@ -372,14 +372,14 @@ export function restore_backup(kind, name, id, reload) {
 	if (content == null)
 		return { ok: false, error: 'backup not found' };
 	return write_profile({ kind: kind, name: name, content: content, reload: reload, test: false });
-}
+};
 
 export function update_subscription(section) {
 	if (!match(`${section}`, RE_SECTION))
 		return { ok: false, error: 'invalid section' };
 	const r = sh(q(P.init) + ' update_subscription ' + q(section));
 	return { ok: r.code == 0, output: tail(r.out, 2000) };
-}
+};
 
 
 
@@ -466,4 +466,4 @@ export function status(full) {
 	if (cn.ok)
 		out.traffic = { up: cn.data?.uploadTotal, down: cn.data?.downloadTotal, connections: length(cn.data?.connections ?? []) };
 	return out;
-}
+};

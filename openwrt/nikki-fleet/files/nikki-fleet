@@ -1,4 +1,4 @@
-#!/usr/bin/ucode
+#!/usr/bin/ucode --
 // nikki-fleet CLI and remote-management agent.
 // SPDX-License-Identifier: GPL-3.0-or-later
 'use strict';

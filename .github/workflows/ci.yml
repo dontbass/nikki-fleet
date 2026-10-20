@@ -25,6 +25,37 @@ jobs:
         working-directory: panel
         run: CGO_ENABLED=0 go build -o nikki-fleet-panel .
 
+  ucode:
+    # compile the router scripts with the exact ucode versions shipped in OpenWrt
+    name: ucode ${{ matrix.branch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - branch: openwrt-24.10
+            sha: 3f64c8089bf3ea4847c96b91df09fbfcaec19e1d
+          - branch: openwrt-25.12
+            sha: 85922056ef7abeace3cca3ab28bc1ac2d88e31b1
+    steps:
+      - uses: actions/checkout@v6
+      - name: build ucode ${{ matrix.sha }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq cmake libjson-c-dev >/dev/null
+          git clone -q https://github.com/jow-/ucode.git /tmp/ucode && cd /tmp/ucode && git checkout -q ${{ matrix.sha }}
+          cmake -S . -B b -DCMAKE_INSTALL_PREFIX=/opt/ucode -DUBUS_SUPPORT=OFF -DUCI_SUPPORT=OFF -DULOOP_SUPPORT=OFF \
+            -DRTNL_SUPPORT=OFF -DNL80211_SUPPORT=OFF -DDEBUG_SUPPORT=OFF -DLOG_SUPPORT=OFF -DSOCKET_SUPPORT=OFF -DDIGEST_SUPPORT=OFF -DZLIB_SUPPORT=OFF >/dev/null
+          make -C b -j"$(nproc)" >/dev/null && sudo make -C b install >/dev/null
+      - name: compile router scripts
+        run: |
+          sudo mkdir -p /usr/share/ucode && sudo ln -sfn "$PWD/openwrt/nikki-fleet/files/ucode/nikki_fleet" /usr/share/ucode/nikki_fleet
+          export LD_LIBRARY_PATH=/opt/ucode/lib
+          for f in openwrt/nikki-fleet/files/nikki-fleet openwrt/luci-app-nikki-fleet/root/usr/share/rpcd/ucode/luci.nikki-fleet; do
+            /opt/ucode/bin/ucode -c -o /tmp/out.ucc "$f" && echo "ok: $f"
+          done
+      - name: CLI arguments reach the script
+        run: head -1 openwrt/nikki-fleet/files/nikki-fleet | grep -qx '#!/usr/bin/ucode --'
+
   packages:
     name: packages ${{ matrix.branch }}
     runs-on: ubuntu-latest
