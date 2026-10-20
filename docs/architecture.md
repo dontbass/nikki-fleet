@@ -77,6 +77,7 @@ Authorization: Bearer <token>
 |---|---|---|
 | `status`, `agent.ping` | просмотр | `full` |
 | `profiles.list`, `profile.read`, `profile.test`, `backups.list`, `logs.tail` | просмотр | `kind`, `name`, `content`, `which`, `lines` |
+| `traffic` | просмотр | `limit` — сводка `/connections`: самые активные соединения (по умолчанию 300) с нужными полями и имена устройств из DHCP |
 | `mihomo.api` GET | просмотр | `method`, `path`, `body` |
 | `mihomo.api` другие методы | редактор | |
 | `profile.write`, `backup.restore`, `nikki.reload`, `subscription.update` | редактор | |

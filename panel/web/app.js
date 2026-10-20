@@ -171,7 +171,7 @@ function addRouterDialog(){
 }
 
 /* ---------- router workspace ---------- */
-const TABS = [["overview","Обзор"],["config","Конфигуратор"],["history","История"],["logs","Логи"],["access","Доступ"],["settings","Настройки"]];
+const TABS = [["overview","Обзор"],["traffic","Трафик"],["config","Конфигуратор"],["history","История"],["logs","Логи"],["access","Доступ"],["settings","Настройки"]];
 async function renderRouter(id, tab){
   clearTimers();
   try{ S.router = await get("/api/routers/" + id); }catch(e){ return handleErr(e); }
@@ -185,7 +185,7 @@ async function renderRouter(id, tab){
   drawPill();
   every(15000, async () => { try{ S.router = await get("/api/routers/" + id); drawPill(); if(S.tab==="overview") drawOverview(); }catch(e){} });
   const body = $("#tabBody");
-  ({overview:tabOverview, config:tabConfig, history:tabHistory, logs:tabLogs, access:tabAccess, settings:tabSettings})[S.tab](body, r);
+  ({overview:tabOverview, traffic:tabTraffic, config:tabConfig, history:tabHistory, logs:tabLogs, access:tabAccess, settings:tabSettings})[S.tab](body, r);
 }
 function drawPill(){
   const r = S.router, p = $("#rpill"); if(!p) return;
@@ -222,7 +222,7 @@ function drawOverview(){
         <div><b>mihomo</b><span>${st.mihomo?.reachable ? esc(st.mihomo.version) : `<span class="err">${esc(st.mihomo?.error || "нет ответа")}</span>`}</span></div>
         <div><b>Профиль</b><span>${esc(nk.profile?.name || "—")}${nk.profile?.kind==="subscription" ? " <span class='muted small'>подписка</span>" : ""}</span></div>
         <div><b>Трафик</b><span>${st.traffic ? `↑ ${bytes(st.traffic.up)} · ↓ ${bytes(st.traffic.down)}` : "—"}</span></div>
-        <div><b>Соединения</b><span>${st.traffic?.connections ?? "—"}</span></div>
+        <div><b>Соединения</b><span>${st.traffic?.connections ?? "—"}${st.traffic ? ` · <a href="#/r/${r.id}/traffic">куда идёт трафик →</a>` : ""}</span></div>
       </div>
     </div>
     <div class="cols">

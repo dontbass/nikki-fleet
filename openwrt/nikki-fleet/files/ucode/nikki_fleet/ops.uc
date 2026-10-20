@@ -5,7 +5,7 @@
 
 import { readfile, writefile, popen, stat, lsdir, mkdir, unlink, rename } from 'fs';
 
-export const VERSION = '0.1.7';
+export const VERSION = '0.1.8';
 
 // NF_ROOT lets tests run against a fake filesystem root.
 const ROOT = getenv('NF_ROOT') ?? '';
@@ -421,6 +421,61 @@ export function update_subscription(section) {
 };
 
 
+
+/* ---------- live traffic ---------- */
+
+// DHCP leases → { ip: hostname } so the panel can show device names.
+function leases() {
+	const out = {};
+	for (let line in split(readfile(ROOT + '/tmp/dhcp.leases') ?? '', '\n')) {
+		const f = split(line, ' ');
+		if (length(f) >= 4 && f[3] != '*' && f[3] != '')
+			out[f[2]] = f[3];
+	}
+	for (let line in split(readfile(ROOT + '/tmp/hosts/odhcpd') ?? '', '\n')) {
+		const m = match(line, /^([0-9a-fA-F:.]+)[ \t]+([^ \t]+)/);
+		if (m && !exists(out, m[1]))
+			out[m[1]] = m[2];
+	}
+	return out;
+}
+
+// Compact snapshot of mihomo connections: the busiest `limit` connections with
+// only the fields the panel shows, plus totals. Keeps router → panel traffic small.
+export function traffic(limit) {
+	limit = int(limit ?? 300);
+	if (limit < 1 || limit > 1000)
+		limit = 300;
+	const r = api('GET', '/connections', null, 8);
+	if (!r.ok)
+		return { ok: false, error: r.error ?? ('mihomo API: HTTP ' + r.code) };
+	const all = r.data?.connections ?? [];
+	sort(all, (a, b) => ((b.upload ?? 0) + (b.download ?? 0)) - ((a.upload ?? 0) + (a.download ?? 0)));
+	const conns = [];
+	for (let c in all) {
+		if (length(conns) >= limit)
+			break;
+		const m = c.metadata ?? {};
+		push(conns, {
+			id: c.id,
+			host: m.host || m.sniffHost || '',
+			dst: m.destinationIP ?? '',
+			port: m.destinationPort ?? '',
+			src: m.sourceIP ?? '',
+			net: m.network ?? '',
+			type: m.type ?? '',
+			proc: m.process ?? '',
+			rule: c.rule ?? '',
+			payload: c.rulePayload ?? '',
+			chain: c.chains ?? [],
+			up: c.upload ?? 0,
+			down: c.download ?? 0,
+			start: c.start ?? '',
+		});
+	}
+	return { ok: true, time: time(), up_total: r.data?.uploadTotal ?? 0, down_total: r.data?.downloadTotal ?? 0,
+		memory: r.data?.memory ?? null, count: length(all), conns: conns, leases: leases() };
+};
 
 /* ---------- status ---------- */
 

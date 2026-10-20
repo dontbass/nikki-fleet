@@ -329,6 +329,7 @@ var cmdNeed = map[string]string{
 	"profile.test":        "viewer",
 	"backups.list":        "viewer",
 	"logs.tail":           "viewer",
+	"traffic":             "viewer",
 	"mihomo.api":          "viewer", // non-GET requires editor, checked below
 	"profile.write":       "editor",
 	"backup.restore":      "editor",

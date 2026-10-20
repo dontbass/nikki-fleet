@@ -147,6 +147,7 @@ const COMMANDS = {
 	'nikki.reload': a => { const r = ops.reload_nikki(); return { ok: r.code == 0, api: ops.wait_api(20) }; },
 	'subscription.update': a => ops.update_subscription(a?.section),
 	'logs.tail': a => ops.logs_tail(a?.which, a?.lines),
+	'traffic': a => ops.traffic(a?.limit),
 	'mihomo.api': a => {
 		if (!api_allowed(a?.method ?? 'GET', `${a?.path}`))
 			return { ok: false, error: 'this API call is not allowed remotely' };
