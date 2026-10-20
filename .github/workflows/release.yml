@@ -44,36 +44,31 @@ jobs:
           generate_release_notes: true
 
   packages:
-    # both OpenWrt branches in one job, uploaded with one command (parallel
-    # uploads to the same release are flaky)
+    name: packages ${{ matrix.branch }}
     needs: meta
     if: needs.meta.outputs.skip != 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        branch: [ openwrt-24.10, openwrt-25.12 ]
     steps:
       - uses: actions/checkout@v6
-      - run: cp -r openwrt/* . && mkdir -p dist
-      - name: build for OpenWrt 24.10 (ipk)
-        uses: openwrt/gh-action-sdk@main
+      - run: cp -r openwrt/* .
+      - uses: openwrt/gh-action-sdk@main
         env:
-          ARCH: x86_64-openwrt-24.10
+          ARCH: x86_64-${{ matrix.branch }}
           FEEDNAME: nikki_fleet
           PACKAGES: nikki-fleet luci-app-nikki-fleet
           NO_REFRESH_CHECK: true
           INDEX: 0
-      - run: sudo cp bin/packages/x86_64/nikki_fleet/*.ipk dist/ && sudo rm -rf bin
-      - name: build for OpenWrt 25.12 (apk)
-        uses: openwrt/gh-action-sdk@main
-        env:
-          ARCH: x86_64-openwrt-25.12
-          FEEDNAME: nikki_fleet
-          PACKAGES: nikki-fleet luci-app-nikki-fleet
-          NO_REFRESH_CHECK: true
-          INDEX: 0
-      - run: sudo cp bin/packages/x86_64/nikki_fleet/*.apk dist/ && ls -la dist
       - name: upload to release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ needs.meta.outputs.tag }}" dist/* --clobber -R "${{ github.repository }}"
+        run: |
+          ls -la bin/packages/x86_64/nikki_fleet/
+          gh release upload "${{ needs.meta.outputs.tag }}" $(ls bin/packages/x86_64/nikki_fleet/*.ipk bin/packages/x86_64/nikki_fleet/*.apk 2>/dev/null) --clobber -R "${{ github.repository }}"
 
   panel-binaries:
     needs: meta
