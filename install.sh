@@ -48,6 +48,27 @@ run_nikki_script() {
 	ash "$TMP/$1" || fail "$2"
 }
 
+# free space (KB) on the filesystem where packages are installed
+free_kb() {
+	df -k /overlay 2>/dev/null | awk 'NR==2 {print $4}' | grep . || df -k / | awk 'NR==2 {print $4}'
+}
+need_space() {
+	ns_have="$(free_kb)"
+	[ -n "$ns_have" ] || return 0
+	[ "$ns_have" -ge "$1" ] && return 0
+	printf '\033[1;31m[nikki-fleet]\033[0m не хватает места во флеш-памяти роутера: свободно %s МБ, для %s нужно около %s МБ\n' \
+		"$((ns_have / 1024))" "$2" "$(($1 / 1024))" >&2
+	cat >&2 <<'EOT'
+Варианты:
+  1. Расширить память флешкой или SD-картой (extroot):
+     https://openwrt.org/docs/guide-user/additional-software/extroot_configuration
+  2. Освободить место: удалить ненужные пакеты (opkg list-installed / apk info),
+     например старые прокси-клиенты или языковые пакеты LuCI.
+  3. Взять роутер с флеш-памятью от 128 МБ (mihomo занимает около 55 МБ).
+EOT
+	exit 1
+}
+
 # 1. Nikki
 if [ -x /etc/init.d/nikki ]; then
 	say "Nikki уже установлен"
@@ -55,6 +76,7 @@ elif [ "${NIKKI:-1}" = 0 ]; then
 	fail "Nikki не установлен (NIKKI=0 — установка пропущена)"
 else
 	say "Nikki не найден — устанавливаю официальный Nikki (nikkinikki-org)"
+	need_space 65536 "Nikki и mihomo"
 	say "подключаю репозиторий Nikki, чтобы он обновлялся штатно"
 	run_nikki_script feed.sh "не удалось подключить репозиторий Nikki"
 	say "устанавливаю Nikki и mihomo (это может занять пару минут)"
@@ -64,6 +86,7 @@ else
 fi
 
 # 2. nikki-fleet
+need_space 1024 "nikki-fleet"
 say "загружаю последний релиз $REPO"
 URLS=$(fetch "https://api.github.com/repos/$REPO/releases/latest" | grep -o '"browser_download_url": *"[^"]*\.'"$EXT"'"' | cut -d'"' -f4)
 [ -n "$URLS" ] || fail "не нашёл пакеты .$EXT в релизе"
