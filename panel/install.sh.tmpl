@@ -28,6 +28,7 @@ fetch_to() {
 }
 
 [ -f /etc/openwrt_release ] || fail "это не OpenWrt"
+# shellcheck disable=SC1091
 . /etc/openwrt_release
 case "$DISTRIB_RELEASE" in
 	*24.10*|*25.12*|SNAPSHOT) ;;
