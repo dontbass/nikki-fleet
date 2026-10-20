@@ -15,12 +15,14 @@ function die(msg) { warn('error: ' + msg + '\n'); exit(1); }
 
 /* ---------- HTTP to the panel ---------- */
 
-function http(method, url, body, timeout, token, insecure) {
-	let cmd = 'curl -sS -X ' + method + ' --max-time ' + int(timeout) + " -w '\\n%{http_code}' -H 'Accept: application/json'";
+function http(method, url, body, timeout, token, insecure, resolve) {
+	let cmd = 'curl -sS -X ' + method + ' --max-time ' + int(timeout) + " -w '\\n%{http_code} %{remote_ip}' -H 'Accept: application/json'";
 	if (insecure)
 		cmd += ' -k';
 	if (token)
 		cmd += ' -H ' + q('Authorization: Bearer ' + token);
+	if (resolve)
+		cmd += ' --resolve ' + q(resolve);
 	let f = null;
 	if (body != null) {
 		f = ops.tmpname('req') + '.json';
@@ -31,11 +33,45 @@ function http(method, url, body, timeout, token, insecure) {
 	if (f)
 		unlink(f);
 	const nl = rindex(r.out, '\n');
-	const code = nl >= 0 ? int(substr(r.out, nl + 1)) : 0;
+	const tailv = nl >= 0 ? split(substr(r.out, nl + 1), ' ') : [];
+	const code = int(tailv[0] ?? 0);
 	const text = nl >= 0 ? substr(r.out, 0, nl) : r.out;
 	let data = null;
 	try { data = length(text) ? json(text) : null; } catch (e) {}
-	return { ok: code >= 200 && code < 300, code: code, data: data, error: code ? null : trim(text) };
+	return { ok: code >= 200 && code < 300, code: code, data: data, error: code ? null : trim(text),
+		ip: tailv[1] ?? '' };
+}
+
+/* The panel address is remembered after every successful request. If DNS on
+ * the router breaks (for example mihomo hands out fake-ip addresses while the
+ * router's own traffic is not proxied), the agent connects to the remembered
+ * address directly so the panel can still reach the router and fix it. */
+
+function host_port(url) {
+	const m = match(url, /^(https?):\/\/([^\/:]+)(:([0-9]+))?/);
+	return m ? { host: m[2], port: m[4] ?? (m[1] == 'https' ? '443' : '80') } : null;
+}
+
+function usable_ip(ip) {
+	return ip && !match(ip, /^198\.1[89]\./) && !match(ip, /^(0\.|127\.)/) && ip != '::1';
+}
+
+function panel_post(cfg, path, body, timeout) {
+	let r = http('POST', cfg.server + path, body, timeout, cfg.token, cfg.insecure);
+	const hp = host_port(cfg.server);
+	if (r.ok && usable_ip(r.ip)) {
+		if (r.ip != cfg.last_ip) {
+			cfg.last_ip = r.ip;
+			writefile(P.state + '/panel_ip', r.ip);
+		}
+	} else if (r.code == 0 && hp && usable_ip(cfg.last_ip) && cfg.last_ip != r.ip) {
+		const ip = index(cfg.last_ip, ':') >= 0 ? '[' + cfg.last_ip + ']' : cfg.last_ip;
+		const r2 = http('POST', cfg.server + path, body, timeout, cfg.token, cfg.insecure,
+			hp.host + ':' + hp.port + ':' + ip);
+		if (r2.code != 0)
+			return r2;
+	}
+	return r;
 }
 
 function agent_cfg() {
@@ -45,6 +81,7 @@ function agent_cfg() {
 		router_id: ops.uci_get('nikki-fleet.agent.router_id') ?? '',
 		insecure: ops.uci_get('nikki-fleet.agent.insecure') == '1',
 		enabled: ops.uci_get('nikki-fleet.agent.enabled') == '1',
+		last_ip: trim(readfile(P.state + '/panel_ip') ?? ''),
 	};
 }
 
@@ -136,42 +173,63 @@ function agent_run() {
 	let cfg = agent_cfg();
 	if (!cfg.server || !cfg.token)
 		die('agent is not enrolled: run  nikki-fleet enroll <panel-url> <code>');
-	log('agent started, panel ' + cfg.server);
+	mkdir(P.state);
+	log('agent ' + ops.VERSION + ' started, panel ' + cfg.server);
 	let results = [], events = [], last_status = 0, backoff = 2, status_interval = 60;
-	const ev = check_pending();
-	if (ev) push(events, ev);
+	try {
+		const ev = check_pending();
+		if (ev) push(events, ev);
+	} catch (e) {
+		log('pending check failed: ' + e);
+	}
 
+	// Every iteration is guarded: an unexpected error must never stop the
+	// agent, otherwise the router silently drops out of the panel.
 	while (true) {
-		const send_status = time() - last_status >= status_interval;
-		const body = { agent_version: ops.VERSION, results: results, events: events,
-			status: send_status ? ops.status(true) : null };
-		const r = http('POST', cfg.server + '/api/agent/v1/poll', body, 75, cfg.token, cfg.insecure);
-		if (!r.ok) {
-			if (r.code == 401 || r.code == 410) {
-				log('panel rejected the token (router removed?), sleeping 10 min');
-				sleep(600 * 1000);
-				cfg = agent_cfg();
-			} else {
-				log(sprintf('poll failed (%s), retry in %ds', r.code ? 'HTTP ' + r.code : r.error, backoff));
-				const e = check_pending();
-				if (e) push(events, e);
-				sleep(backoff * 1000);
-				backoff = backoff < 30 ? backoff * 2 : 30;
+		let wait = 0;
+		try {
+			const send_status = time() - last_status >= status_interval;
+			let st = null;
+			if (send_status) {
+				try { st = ops.status(true); } catch (e) { st = { status_error: `${e}` }; }
 			}
-			continue;
+			const body = { agent_version: ops.VERSION, results: results, events: events, status: st };
+			const r = panel_post(cfg, '/api/agent/v1/poll', body, 75);
+			if (!r.ok) {
+				if (r.code == 401 || r.code == 410) {
+					log('panel rejected the token (router removed?), sleeping 10 min');
+					wait = 600;
+				} else {
+					log(sprintf('poll failed (%s), retry in %ds', r.code ? 'HTTP ' + r.code : r.error, backoff));
+					const e = check_pending();
+					if (e) push(events, e);
+					wait = backoff;
+					backoff = backoff < 30 ? backoff * 2 : 30;
+				}
+			} else {
+				backoff = 2;
+				results = [];
+				events = [];
+				if (send_status)
+					last_status = time();
+				if (get_pending())
+					clear_pending();   // panel reachable with the new config — keep it
+				status_interval = r.data?.status_interval ?? status_interval;
+				for (let cmd in (r.data?.commands ?? [])) {
+					push(results, execute(cmd));
+					if (cmd.type == 'status')
+						last_status = time();
+				}
+			}
+		} catch (e) {
+			log('agent error: ' + e + (e?.stacktrace ? ' ' + sprintf('%J', e.stacktrace) : ''));
+			results = [];
+			wait = 10;
 		}
-		backoff = 2;
-		results = [];
-		events = [];
-		if (send_status)
-			last_status = time();
-		if (get_pending())
-			clear_pending();   // panel reachable with the new config — keep it
-		status_interval = r.data?.status_interval ?? status_interval;
-		for (let cmd in (r.data?.commands ?? [])) {
-			push(results, execute(cmd));
-			if (cmd.type == 'status')
-				last_status = time();
+		if (wait) {
+			sleep(wait * 1000);
+			if (wait >= 600)
+				cfg = agent_cfg();
 		}
 	}
 }
@@ -216,6 +274,7 @@ usage:
   nikki-fleet unenroll                   disconnect from the panel
   nikki-fleet agent                      run the agent (used by the service)
   nikki-fleet watchdog                   restore the previous profile if a change was not confirmed
+  nikki-fleet doctor                     diagnose the connection to the panel
 `;
 
 const argv = ARGV;
@@ -285,6 +344,29 @@ case 'agent':
 case 'watchdog': {
 	const e = check_pending();
 	out(e ?? { pending: get_pending() });
+	break;
+}
+case 'doctor': {
+	// one command that collects what is needed to find out why the router is offline
+	const cfg = agent_cfg();
+	const hp = host_port(cfg.server);
+	const sec = t => print('\n== ' + t + '\n');
+	print('nikki-fleet ' + ops.VERSION + ', panel ' + (cfg.server || '(not enrolled)') + ', enabled ' + cfg.enabled + '\n');
+	sec('service');
+	print(ops.sh("ubus call service list '{\"name\":\"nikki-fleet\"}'; /etc/init.d/nikki-fleet enabled && echo autostart: yes || echo autostart: no").out);
+	sec('agent log');
+	print(ops.sh('logread -e nikki-fleet 2>/dev/null | tail -n 25').out);
+	if (hp) {
+		sec('dns ' + hp.host + ' (remembered ip: ' + (cfg.last_ip || '-') + ')');
+		print(ops.sh('nslookup ' + q(hp.host) + ' 2>&1 | tail -n 4').out);
+		sec('panel');
+		const r = http('GET', cfg.server + '/api/info', null, 15, null, cfg.insecure);
+		print((r.ok ? 'reachable, ip ' + r.ip : 'NOT reachable: ' + (r.error ?? 'HTTP ' + r.code)) + '\n');
+	}
+	sec('nikki');
+	const st = ops.status(false);
+	print(sprintf('enabled %s, running %s, mihomo api %s\n', st.nikki.enabled, st.nikki.running, st.mihomo.reachable));
+	print(ops.sh('free | head -n 2; df -h /overlay /tmp 2>/dev/null').out);
 	break;
 }
 case 'version':

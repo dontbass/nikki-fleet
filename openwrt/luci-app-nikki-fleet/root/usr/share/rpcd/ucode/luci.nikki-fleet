@@ -8,6 +8,13 @@ import * as ops from '/usr/share/ucode/nikki_fleet/ops.uc';
 
 function kind(k) { return k == 'subscription' ? 'subscription' : 'file'; }
 
+function agent_running() {
+	const r = ops.sh("ubus call service list '{\"name\":\"nikki-fleet\"}'");
+	if (r.code == 0 && length(trim(r.out)) > 2)
+		return !!match(r.out, /"running": *true/);
+	return ops.sh('pidof ucode >/dev/null && grep -qs "nikki-fleet.agent" /proc/[0-9]*/cmdline').code == 0;
+}
+
 const methods = {
 	profiles: {
 		call: function() {
@@ -67,7 +74,7 @@ const methods = {
 				enabled: g('enabled') == '1',
 				server: g('server'),
 				router_id: g('router_id'),
-				running: ops.sh('pgrep -f "nikki-fleet agent"').code == 0,
+				running: agent_running(),
 				version: ops.VERSION,
 			};
 		}

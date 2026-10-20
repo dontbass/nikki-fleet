@@ -141,6 +141,7 @@ nikki-fleet restore main.yaml <id>   восстановить копию
 nikki-fleet enable | disable         включить Nikki (с проверкой) или выключить
 nikki-fleet enroll <url> <код>       подключить к панели
 nikki-fleet unenroll                 отключить от панели
+nikki-fleet doctor                   почему роутер не на связи с панелью: служба, лог, DNS, доступ к панели
 ```
 
 ## Статус

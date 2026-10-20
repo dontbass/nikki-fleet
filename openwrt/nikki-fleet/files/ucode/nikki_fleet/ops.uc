@@ -5,7 +5,7 @@
 
 import { readfile, writefile, popen, stat, lsdir, mkdir, unlink, rename } from 'fs';
 
-export const VERSION = '0.1.5';
+export const VERSION = '0.1.6';
 
 // NF_ROOT lets tests run against a fake filesystem root.
 const ROOT = getenv('NF_ROOT') ?? '';
@@ -78,7 +78,7 @@ export function yaml_to_json(path) {
 	const r = sh('yq -M -p yaml -o json ' + q(path));
 	if (r.code != 0)
 		return null;
-	return json(r.out);
+	try { return json(r.out); } catch (e) { return null; }
 };
 
 function ts() {
@@ -185,8 +185,10 @@ export function list_backups(kind, name) {
 
 /* ---------- mihomo API ---------- */
 
-function controller() {
+function controller_parse() {
 	const cfg = yaml_to_json(P.runcfg) ?? {};
+	if (type(cfg) != 'object')
+		return null;
 	let listen = cfg['external-controller-tls'] ?? cfg['external-controller'];
 	if (!listen)
 		return null;
@@ -201,6 +203,20 @@ function controller() {
 	if (index(host, ':') >= 0)
 		host = '[' + host + ']';
 	return { url: (tls ? 'https://' : 'http://') + host + ':' + m[2], secret: cfg.secret ? `${cfg.secret}` : '' };
+}
+
+// Parsing the running config with yq costs a process and RAM, so the result is
+// cached until the file changes (status() calls the API several times).
+let ctl_cache = null;
+
+function controller() {
+	const st = stat(P.runcfg);
+	const key = st ? sprintf('%d:%d', st.mtime, st.size) : '';
+	if (ctl_cache && ctl_cache.key == key)
+		return ctl_cache.value;
+	const value = controller_parse();
+	ctl_cache = { key: key, value: value };
+	return value;
 }
 
 const API_METHODS = { GET: true, PUT: true, PATCH: true, POST: true, DELETE: true };
@@ -437,11 +453,21 @@ export function status(full) {
 		},
 		time: time(),
 	};
-	delete out.nikki.profile.path;
+	if (type(out.nikki.profile) == 'object')
+		delete out.nikki.profile.path;
 	const v = api('GET', '/version', null, 3);
 	out.mihomo = v.ok ? { reachable: true, version: v.data?.version } : { reachable: false, error: v.error ?? ('HTTP ' + v.code) };
 	if (!full || !v.ok)
 		return out;
+	try {
+		status_details(out);
+	} catch (e) {
+		out.status_error = `${e}`;
+	}
+	return out;
+};
+
+function status_details(out) {
 
 	const pp = api('GET', '/providers/proxies', null, 8);
 	out.providers = [];
@@ -459,11 +485,10 @@ export function status(full) {
 	for (let n, g in (px.data?.proxies ?? {})) {
 		if (!(g.type in [ 'Selector', 'URLTest', 'Fallback', 'LoadBalance', 'Relay' ]) || n == 'GLOBAL')
 			continue;
-		const h = px.data.proxies[g.now]?.history;
-		push(out.groups, { name: n, type: g.type, now: g.now, delay: h && length(h) ? h[length(h) - 1].delay : null });
+		const h = g.now != null ? px.data.proxies[g.now]?.history : null;
+		push(out.groups, { name: n, type: g.type, now: g.now, delay: type(h) == 'array' && length(h) ? h[length(h) - 1]?.delay : null });
 	}
 	const cn = api('GET', '/connections', null, 5);
 	if (cn.ok)
 		out.traffic = { up: cn.data?.uploadTotal, down: cn.data?.downloadTotal, connections: length(cn.data?.connections ?? []) };
-	return out;
-};
+}
