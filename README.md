@@ -70,7 +70,36 @@ apk update && apk add --allow-untrusted ./nikki-fleet-*.apk ./luci-app-nikki-fle
 
 После установки в LuCI появятся пункты **Службы → Nikki → Конфигуратор** и **Удалённое управление**.
 
-### Панель
+### Панель — одной командой
+
+Нужен VPS с **Ubuntu 24.04 или 26.04** (подойдут и Debian 12/13), домен и A-запись этого домена на IP сервера. На сервере:
+
+```sh
+wget -qO- https://raw.githubusercontent.com/dontbass/nikki-fleet/main/install-panel.sh | sudo bash -s -- --domain fleet.example.com
+```
+
+Скрипт сам:
+
+- проверит, что домен указывает на этот сервер, и что порты 80/443 свободны;
+- скачает панель из последнего релиза и запустит её как службу `nikki-fleet-panel` (systemd, изолированный пользователь);
+- поставит [Caddy](https://caddyserver.com) — он выпустит сертификат Let's Encrypt для домена и будет продлевать его автоматически;
+- откроет порты 80 и 443 в ufw, если он включён.
+
+Затем откройте `https://fleet.example.com` и создайте учётную запись — она станет администратором.
+
+| Параметр | Назначение |
+|---|---|
+| `--domain NAME` | домен панели (без него скрипт спросит) |
+| `--email ADDRESS` | e-mail для уведомлений Let's Encrypt |
+| `--open-registration` | разрешить регистрацию всем (по умолчанию пользователей создаёт админ) |
+| `--no-caddy` | без Caddy — если у вас уже есть Nginx Proxy Manager/Traefik: проксируйте на `http://127.0.0.1:8080` |
+| `--port N` | локальный порт панели (по умолчанию 8080) |
+| `--update` | обновить панель до последнего релиза |
+| `--uninstall` | удалить службу (данные сохраняются) |
+
+Обновление — та же команда с `--update`. Настройки — `/etc/nikki-fleet/panel.env`, журнал — `journalctl -u nikki-fleet-panel -f`, данные — `/var/lib/private/nikki-fleet`.
+
+<details><summary>Docker или вручную</summary>
 
 ```sh
 mkdir nikki-fleet && cd nikki-fleet
@@ -79,9 +108,7 @@ curl -fsSLO https://raw.githubusercontent.com/dontbass/nikki-fleet/main/panel/do
 docker compose up -d
 ```
 
-Поставьте перед панелью обратный прокси с HTTPS (Nginx Proxy Manager, Caddy, Traefik). Откройте панель — первая созданная учётная запись станет администратором. Регистрацию для других людей можно открыть в разделе «Учётная запись».
-
-Без Docker: возьмите бинарник `nikki-fleet-panel-linux-*` из релиза и запустите `nikki-fleet-panel -public-url https://fleet.example.com -data /var/lib/nikki-fleet`.
+Перед контейнером нужен обратный прокси с HTTPS. Без Docker: бинарник `nikki-fleet-panel-linux-*` из релиза, `nikki-fleet-panel -public-url https://fleet.example.com -data /var/lib/nikki-fleet`.
 
 | Переменная | По умолчанию | Назначение |
 |---|---|---|
@@ -90,6 +117,8 @@ docker compose up -d
 | `NF_DATA` | `./data` | каталог данных |
 | `NF_TRUST_PROXY` | `0` | `1`, если панель за обратным прокси |
 | `NF_REGISTRATION` | закрыта | `open` — открытая регистрация |
+
+</details>
 
 ### Подключить роутер
 

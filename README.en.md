@@ -11,7 +11,16 @@ The router agent keeps an outbound HTTPS long-poll to the panel and executes a f
 
 Supported: OpenWrt 24.10 (opkg) and 25.12 (apk); packages are architecture-independent.
 
-Quick start: run the panel with `panel/docker-compose.yml` behind an HTTPS reverse proxy, open it, create the admin account, press “Connect router” and run the shown command on the router.
+Quick start:
+
+```sh
+# panel on Ubuntu 24.04/26.04 — installs the service, Caddy and a Let's Encrypt certificate
+wget -qO- https://raw.githubusercontent.com/dontbass/nikki-fleet/main/install-panel.sh | sudo bash -s -- --domain fleet.example.com
+# router (OpenWrt 24.10/25.12) — installs the official Nikki if missing, then nikki-fleet
+wget -qO- https://raw.githubusercontent.com/dontbass/nikki-fleet/main/install.sh | sh
+```
+
+Open the panel, create the admin account, press “Connect router” and run the shown command on the router.
 
 See [docs/architecture.md](docs/architecture.md) (Russian) for the protocol and security model, and [docs/development.md](docs/development.md) for development.
 
