@@ -5,7 +5,7 @@
 
 import { readfile, writefile, popen, stat, lsdir, mkdir, unlink, rename } from 'fs';
 
-export const VERSION = '0.1.6';
+export const VERSION = '0.1.7';
 
 // NF_ROOT lets tests run against a fake filesystem root.
 const ROOT = getenv('NF_ROOT') ?? '';
@@ -185,8 +185,31 @@ export function list_backups(kind, name) {
 
 /* ---------- mihomo API ---------- */
 
+// Top-level scalar keys are read straight from the YAML text: it needs no
+// extra process and works even when yq prints something that is not JSON.
+function yaml_top_scalars(text, keys) {
+	const out = {};
+	for (let line in split(text ?? '', '\n')) {
+		const m = match(line, /^([A-Za-z0-9_-]+):[ \t]*(.*)$/);
+		if (!m || !(m[1] in keys))
+			continue;
+		let v = trim(m[2]);
+		let qm = match(v, /^"((\\.|[^"\\])*)"/) ?? match(v, /^'([^']*)'/);
+		if (qm)
+			v = qm[1];
+		else
+			v = trim(replace(v, /[ \t]+#.*$/, ''));
+		if (v != '' && v != '~' && v != 'null')
+			out[m[1]] = v;
+	}
+	return out;
+}
+
 function controller_parse() {
-	const cfg = yaml_to_json(P.runcfg) ?? {};
+	const keys = [ 'external-controller', 'external-controller-tls', 'secret' ];
+	let cfg = yaml_top_scalars(readfile(P.runcfg), keys);
+	if (!cfg['external-controller'] && !cfg['external-controller-tls'])
+		cfg = yaml_to_json(P.runcfg) ?? {};
 	if (type(cfg) != 'object')
 		return null;
 	let listen = cfg['external-controller-tls'] ?? cfg['external-controller'];
