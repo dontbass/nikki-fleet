@@ -72,8 +72,10 @@ jobs:
           pkgname() { case "$1" in *.ipk) echo "${1%%_*}";; *.apk) echo "$1" | sed -E 's/-[0-9][^-]*(-r[0-9]+)?\.apk$//';; esac; }
           for f in bin/packages/x86_64/nikki_fleet/*.ipk bin/packages/x86_64/nikki_fleet/*.apk; do
             [ -e "$f" ] || continue; b=$(basename "$f"); n=$(pkgname "$b"); ext=${b##*.}
-            gh release view "${{ needs.meta.outputs.tag }}" -R "${{ github.repository }}" --json assets -q '.assets[].name' | while read -r a; do
-              [ "${a##*.}" = "$ext" ] && [ "$(pkgname "$a")" = "$n" ] && [ "$a" != "$b" ] && gh release delete-asset "${{ needs.meta.outputs.tag }}" "$a" -y -R "${{ github.repository }}"
+            for a in $(gh release view "${{ needs.meta.outputs.tag }}" -R "${{ github.repository }}" --json assets -q '.assets[].name'); do
+              if [ "${a##*.}" = "$ext" ] && [ "$(pkgname "$a")" = "$n" ] && [ "$a" != "$b" ]; then
+                gh release delete-asset "${{ needs.meta.outputs.tag }}" "$a" -y -R "${{ github.repository }}" || true
+              fi
             done
           done
           gh release upload "${{ needs.meta.outputs.tag }}" $(ls bin/packages/x86_64/nikki_fleet/*.ipk bin/packages/x86_64/nikki_fleet/*.apk 2>/dev/null) --clobber -R "${{ github.repository }}"
