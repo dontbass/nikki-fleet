@@ -20,7 +20,7 @@ endef
 
 # Runtime-only dependencies: these are scripts, so the SDK does not need to
 # compile nikki/mihomo/yq just to package them (keeps CI builds fast).
-EXTRA_DEPENDS:=nikki, ucode, ucode-mod-fs, curl, yq
+EXTRA_DEPENDS:=nikki (>=0), ucode (>=0), ucode-mod-fs (>=0), curl (>=0), yq (>=0)
 
 define Package/nikki-fleet/description
   CLI and agent for Nikki (mihomo on OpenWrt): safe profile editing with
