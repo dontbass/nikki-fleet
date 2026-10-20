@@ -5,7 +5,7 @@
 
 import { readfile, writefile, popen, stat, lsdir, mkdir, unlink, rename } from 'fs';
 
-export const VERSION = '0.1.9';
+export const VERSION = '0.1.10';
 
 // NF_ROOT lets tests run against a fake filesystem root.
 const ROOT = getenv('NF_ROOT') ?? '';
@@ -267,9 +267,10 @@ export function api(method, path, body, timeout) {
 	const r = sh(cmd + ' ' + q(c.url + path));
 	if (bodyfile)
 		unlink(bodyfile);
-	const nl = rindex(r.out, '\n');
-	const code = nl >= 0 ? int(substr(r.out, nl + 1)) : 0;
-	const text = nl >= 0 ? substr(r.out, 0, nl) : r.out;
+	// ucode 24.10: rindex() returns -1 for a match at index 0 (empty body), hence the prefix
+	const o = '.' + r.out, nl = rindex(o, '\n');
+	const code = nl > 0 ? int(substr(o, nl + 1)) : 0;
+	const text = nl > 0 ? substr(o, 1, nl - 1) : r.out;
 	let data = null;
 	if (length(text))
 		try { data = json(text); } catch (e) { data = { raw: tail(text, 2000) }; }
@@ -277,9 +278,16 @@ export function api(method, path, body, timeout) {
 };
 
 function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+export const UPDATE_LOG = ROOT + '/tmp/nikki-fleet-update.log';
+
 export function logs_tail(which, lines) {
-	const file = (which == 'app' ? 'app' : 'core') + '.log';
 	lines = clamp(int(lines ?? 100), 1, 1000);
+	if (which == 'update') {
+		if (!stat(UPDATE_LOG))
+			return { ok: false, content: '' };
+		return { ok: true, content: sh('tail -n ' + lines + ' ' + q(UPDATE_LOG)).out, running: update_running() };
+	}
+	const file = (which == 'app' ? 'app' : 'core') + '.log';
 	for (let d in P.logs) {
 		if (stat(d + '/' + file)) {
 			const r = sh('tail -n ' + lines + ' ' + q(d + '/' + file));
@@ -421,6 +429,85 @@ export function update_subscription(section) {
 };
 
 
+
+/* ---------- self-update ---------- */
+
+const UPDATE_PID = ROOT + '/tmp/nikki-fleet-update.pid';
+
+function update_running() {
+	const pid = trim(readfile(UPDATE_PID) ?? '');
+	return pid != '' && stat('/proc/' + pid) != null;
+}
+
+// Runs the panel's installer in the background: it fetches the latest
+// nikki-fleet packages (from GitHub or through the panel) and upgrades them.
+// The upgrade restarts the agent, so the command only starts the job and
+// returns; progress is in logs.tail which=update.
+export function self_update(server, insecure) {
+	server = rtrim(`${server ?? ''}`, '/');
+	if (!match(server, /^https?:\/\/[^]\/ '"`$\\[]+(\/[A-Za-z0-9._~\/-]*)?$/) && !match(server, /^https?:\/\/\[[0-9a-fA-F:]+\](:[0-9]+)?$/))
+		return { ok: false, error: 'invalid panel URL' };
+	if (update_running())
+		return { ok: true, started: false, running: true, message: 'update is already running' };
+	const k = insecure ? ' -k' : '', nk = insecure ? ' --no-check-certificate' : '';
+	const script = ROOT + '/tmp/nikki-fleet-update.sh';
+	writefile(script, `#!/bin/sh
+echo "$$" > ${q(UPDATE_PID)}
+echo "== nikki-fleet update $(date)"
+url=${q(server + '/install.sh')}
+if command -v curl >/dev/null 2>&1; then curl -fsSL${k} --connect-timeout 15 "$url"; else wget -q${nk} -T 30 -O- "$url"; fi > /tmp/nikki-fleet-install.sh || { echo "ERROR: cannot download $url"; rm -f ${q(UPDATE_PID)}; exit 1; }
+NIKKI=0 sh /tmp/nikki-fleet-install.sh
+rc=$?
+rm -f /tmp/nikki-fleet-install.sh ${q(UPDATE_PID)}
+echo "== done (exit $rc) $(date)"
+`);
+	// detach: own session if possible, output to the log, no inherited pipe
+	const r = sh('S=; command -v setsid >/dev/null 2>&1 && S=setsid; ( $S sh ' + q(script) + ' </dev/null >' + q(UPDATE_LOG) + ' 2>&1 & )');
+	return { ok: r.code == 0, started: r.code == 0, from_version: VERSION };
+};
+
+/* ---------- proxy groups ---------- */
+
+// Compact view of /proxies for the panel's group manager: groups in config
+// order (as listed in GLOBAL) and every proxy's type, UDP flag and last delay.
+export function proxies() {
+	const r = api('GET', '/proxies', null, 15);
+	if (!r.ok)
+		return { ok: false, error: r.error ?? ('mihomo API: HTTP ' + r.code) };
+	const px = r.data?.proxies ?? {};
+	const order = {};
+	let i = 0;
+	for (let n in (px.GLOBAL?.all ?? []))
+		order[n] = i++;
+	const nodes = {}, groups = [];
+	for (let n, p in px) {
+		const h = p.history;
+		nodes[n] = { t: p.type, u: !!p.udp, d: type(h) == 'array' && length(h) ? h[length(h) - 1]?.delay : null,
+			a: p.alive };
+		if (type(p.all) == 'array' && n != 'GLOBAL')
+			push(groups, { name: n, type: p.type, now: p.now ?? '', fixed: p.fixed ?? '', all: p.all,
+				hidden: !!p.hidden, icon: p.icon ?? '', test_url: p.testUrl ?? '' });
+	}
+	sort(groups, (a, b) => (order[a.name] ?? 100000) - (order[b.name] ?? 100000));
+	const providers = [];
+	const pp = api('GET', '/providers/proxies', null, 15);
+	for (let n, p in (pp.data?.providers ?? {})) {
+		if (p.vehicleType == 'Compatible')
+			continue;
+		const names = [];
+		for (let x in (p.proxies ?? [])) {
+			push(names, x.name);
+			if (!exists(nodes, x.name)) {
+				const h = x.history;
+				nodes[x.name] = { t: x.type, u: !!x.udp, d: type(h) == 'array' && length(h) ? h[length(h) - 1]?.delay : null, a: x.alive };
+			}
+		}
+		push(providers, { name: n, vehicle: p.vehicleType, updated: p.updatedAt, sub: p.subscriptionInfo,
+			test_url: p.testUrl ?? '', proxies: names });
+	}
+	const cf = api('GET', '/configs', null, 5);
+	return { ok: true, mode: cf.data?.mode ?? '', groups: groups, nodes: nodes, providers: providers };
+};
 
 /* ---------- live traffic ---------- */
 

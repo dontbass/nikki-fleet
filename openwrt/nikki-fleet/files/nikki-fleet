@@ -32,10 +32,11 @@ function http(method, url, body, timeout, token, insecure, resolve) {
 	const r = ops.sh(cmd + ' ' + q(url));
 	if (f)
 		unlink(f);
-	const nl = rindex(r.out, '\n');
-	const tailv = nl >= 0 ? split(substr(r.out, nl + 1), ' ') : [];
+	// ucode 24.10: rindex() returns -1 for a match at index 0 (empty body), hence the prefix
+	const o = '.' + r.out, nl = rindex(o, '\n');
+	const tailv = nl > 0 ? split(substr(o, nl + 1), ' ') : [];
 	const code = int(tailv[0] ?? 0);
-	const text = nl >= 0 ? substr(r.out, 0, nl) : r.out;
+	const text = nl > 0 ? substr(o, 1, nl - 1) : r.out;
 	let data = null;
 	try { data = length(text) ? json(text) : null; } catch (e) {}
 	return { ok: code >= 200 && code < 300, code: code, data: data, error: code ? null : trim(text),
@@ -148,6 +149,8 @@ const COMMANDS = {
 	'subscription.update': a => ops.update_subscription(a?.section),
 	'logs.tail': a => ops.logs_tail(a?.which, a?.lines),
 	'traffic': a => ops.traffic(a?.limit),
+	'proxies': a => ops.proxies(),
+	'fleet.update': a => { const c = agent_cfg(); return ops.self_update(c.server, c.insecure); },
 	'mihomo.api': a => {
 		if (!api_allowed(a?.method ?? 'GET', `${a?.path}`))
 			return { ok: false, error: 'this API call is not allowed remotely' };
@@ -276,6 +279,7 @@ usage:
   nikki-fleet agent                      run the agent (used by the service)
   nikki-fleet watchdog                   restore the previous profile if a change was not confirmed
   nikki-fleet doctor                     diagnose the connection to the panel
+  nikki-fleet update [panel-url]         upgrade nikki-fleet packages in the background
 `;
 
 const argv = ARGV;
@@ -369,6 +373,13 @@ case 'doctor': {
 	print(sprintf('enabled %s, running %s, mihomo api %s\n', st.nikki.enabled, st.nikki.running, st.mihomo.reachable));
 	print(ops.sh('free | head -n 2; df -h /overlay /tmp 2>/dev/null').out);
 	break;
+}
+case 'update': {
+	const c = agent_cfg();
+	const r = ops.self_update(c.server || args[1], c.insecure);
+	out(r);
+	if (r.ok) print('log: ' + ops.UPDATE_LOG + '\n');
+	exit(r.ok ? 0 : 2);
 }
 case 'version':
 	print(ops.VERSION + '\n');

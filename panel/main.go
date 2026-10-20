@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-var version = "0.1.9"
+var version = "0.1.10"
 
 //go:embed web
 var webFS embed.FS
@@ -114,6 +114,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /api/me/password", a.requireUser(a.changePassword))
 
 	// routers
+	mux.HandleFunc("GET /api/fleet/latest", a.requireUser(a.fleetLatest))
 	mux.HandleFunc("GET /api/routers", a.requireUser(a.listRouters))
 	mux.HandleFunc("POST /api/routers/enroll", a.requireUser(a.createEnrollCode))
 	mux.HandleFunc("GET /api/routers/{id}", a.requireUser(a.getRouter))

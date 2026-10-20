@@ -78,6 +78,8 @@ Authorization: Bearer <token>
 | `status`, `agent.ping` | просмотр | `full` |
 | `profiles.list`, `profile.read`, `profile.test`, `backups.list`, `logs.tail` | просмотр | `kind`, `name`, `content`, `which`, `lines` |
 | `traffic` | просмотр | `limit` — сводка `/connections`: самые активные соединения (по умолчанию 300) с нужными полями и имена устройств из DHCP |
+| `proxies` | просмотр | — сжатый `/proxies` + `/providers/proxies`: группы в порядке конфига, тип, UDP и последняя задержка узлов, подписки |
+| `fleet.update` | владелец | — запускает в фоне установщик панели (`/install.sh`), который обновляет пакеты nikki-fleet; журнал — `logs.tail which=update` |
 | `mihomo.api` GET | просмотр | `method`, `path`, `body` |
 | `mihomo.api` другие методы | редактор | |
 | `profile.write`, `backup.restore`, `nikki.reload`, `subscription.update` | редактор | |
@@ -113,5 +115,4 @@ Authorization: Bearer <token>
 
 - Шаблоны конфигов и рассылка изменений на группу роутеров.
 - Уведомления в Telegram: роутер офлайн, подписка заканчивается, автооткат.
-- Обновление пакетов nikki-fleet из панели.
 - Опциональный SQL-бэкенд для больших инсталляций.

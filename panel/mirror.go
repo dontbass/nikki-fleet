@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 )
@@ -193,4 +194,16 @@ func (a *App) mirrorHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeErr(w, http.StatusNotFound, "not found")
+}
+
+// fleetLatest tells the UI which nikki-fleet version routers can upgrade to.
+func (a *App) fleetLatest(w http.ResponseWriter, r *http.Request, u *User) {
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+	tag, names, err := a.mirror.latest(ctx)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, "не удалось узнать последнюю версию: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"tag": tag, "version": strings.TrimPrefix(tag, "v"), "assets": len(names)})
 }

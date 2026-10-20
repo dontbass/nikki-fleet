@@ -330,6 +330,8 @@ var cmdNeed = map[string]string{
 	"backups.list":        "viewer",
 	"logs.tail":           "viewer",
 	"traffic":             "viewer",
+	"proxies":             "viewer",
+	"fleet.update":        "owner",
 	"mihomo.api":          "viewer", // non-GET requires editor, checked below
 	"profile.write":       "editor",
 	"backup.restore":      "editor",
@@ -378,7 +380,7 @@ func (a *App) routerCmd(w http.ResponseWriter, r *http.Request, u *User) {
 		writeErr(w, http.StatusGatewayTimeout, "роутер не ответил вовремя")
 		return
 	}
-	if need == "editor" {
+	if rank(need) >= rank("editor") {
 		a.recordChange(u, rt, req.Type, args, res)
 	}
 	writeJSON(w, http.StatusOK, res)

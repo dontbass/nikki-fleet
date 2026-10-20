@@ -48,6 +48,46 @@ function subLine(sub){
   if(sub.Expire) parts.push("до " + new Date(sub.Expire*1000).toLocaleDateString("ru-RU"));
   return parts.join(" · ");
 }
+/* ---------- nikki-fleet updates ---------- */
+function vcmp(a, b){
+  const pa = String(a||"").replace(/^v/,"").split(/[.-]/).map(x => parseInt(x)||0), pb = String(b||"").replace(/^v/,"").split(/[.-]/).map(x => parseInt(x)||0);
+  for(let i = 0; i < Math.max(pa.length, pb.length); i++){ const d = (pa[i]||0) - (pb[i]||0); if(d) return d < 0 ? -1 : 1; }
+  return 0;
+}
+let latestP = null, latestAt = 0;
+function latestFleet(){
+  if(!latestP || Date.now() - latestAt > 10*60*1000){ latestAt = Date.now(); latestP = get("/api/fleet/latest").then(d => d.version).catch(() => { latestP = null; return null; }); }
+  return latestP;
+}
+S.latest = null;
+const needsUpdate = r => S.latest && r.agent_version && /^\d/.test(r.agent_version) && vcmp(r.agent_version, S.latest) < 0;
+
+function updateDialog(r){
+  const target = S.latest;
+  openDialog(`<h2>Обновление nikki-fleet на «${esc(r.name)}»</h2>
+    <div class="small muted">${esc(r.agent_version || "?")} → <b>${esc(target || "последняя")}</b>. Роутер скачает пакеты (с GitHub или через эту панель) и обновит их. Nikki, mihomo и профили не меняются, интернет не прерывается. Агент перезапустится — роутер на несколько секунд пропадёт из панели.</div>
+    <div class="note small" id="updState">Запускаю…</div>
+    <pre class="code" id="updLog" style="max-height:40vh">…</pre>
+    <div class="row end"><button data-close>Закрыть</button></div>`, async () => {
+    const st = (t, cls) => { const e = $("#updState"); if(e){ e.textContent = t; e.className = "note small " + (cls||""); } };
+    try{
+      const d = await cmd(r.id, "fleet.update");
+      if(!d.ok) return st(d.error || "Не удалось запустить обновление", "err");
+      st(d.running ? "Обновление уже идёт…" : "Обновление идёт…");
+    }catch(e){ return st(e.message, "err"); }
+    const t0 = Date.now();
+    dlg._timer = setInterval(async () => {
+      if(!$("#updLog")) return clearInterval(dlg._timer);
+      let rr = null; try{ rr = await get("/api/routers/" + r.id); }catch(e){}
+      try{ const l = await cmd(r.id, "logs.tail", {which:"update", lines:60}); if(l.content){ const o = $("#updLog"); o.textContent = l.content; o.scrollTop = o.scrollHeight; } }catch(e){}
+      if(rr && target && rr.online && vcmp(rr.agent_version, target) >= 0){
+        clearInterval(dlg._timer); st(`Готово: nikki-fleet ${rr.agent_version}`, "ok");
+        if(S.router?.id === r.id){ S.router = rr; drawOverview(); }
+      }else if(Date.now() - t0 > 5*60*1000){ clearInterval(dlg._timer); st("Обновление не завершилось за 5 минут — смотрите журнал выше", "err"); }
+    }, 4000);
+  });
+}
+
 function clearTimers(){ S.timers.forEach(clearInterval); S.timers = []; }
 function every(ms, fn){ S.timers.push(setInterval(fn, ms)); }
 
@@ -114,6 +154,7 @@ function routerCard(r){
       ${nk.profile?.name ? `<span>профиль ${esc(nk.profile.name)}</span>` : ""}
       ${st.nikki ? (nk.running ? `<span class="ok">Nikki работает</span>` : `<span class="err">Nikki остановлен</span>`) : `<span>статус ещё не получен</span>`}
       ${r.role !== "owner" ? `<span>${ROLE[r.role]} · владелец ${esc(r.owner)}</span>` : ""}
+      ${needsUpdate(r) ? `<span class="pill warn">есть обновление ${esc(S.latest)}</span>` : ""}
     </div>
     ${subs.length ? `<div class="subs">${subs.map(p => {
       const used = p.sub ? (p.sub.Upload||0)+(p.sub.Download||0) : 0, pct = p.sub?.Total ? Math.min(100, used/p.sub.Total*100) : 0;
@@ -140,6 +181,7 @@ async function renderFleet(){
   };
   try{ S.routers = await get("/api/routers"); }catch(e){ return handleErr(e); }
   draw();
+  latestFleet().then(v => { if(v && v !== S.latest){ S.latest = v; if(location.hash==="#/"||!location.hash) draw(); } });
   every(15000, async () => { try{ S.routers = await get("/api/routers"); if(location.hash==="#/" || location.hash==="") draw(); }catch(e){} });
 }
 document.addEventListener("click", e => { if(e.target.closest("#addRouter,#addRouter2")) addRouterDialog(); });
@@ -171,7 +213,7 @@ function addRouterDialog(){
 }
 
 /* ---------- router workspace ---------- */
-const TABS = [["overview","Обзор"],["traffic","Трафик"],["config","Конфигуратор"],["history","История"],["logs","Логи"],["access","Доступ"],["settings","Настройки"]];
+const TABS = [["overview","Обзор"],["proxies","Прокси"],["traffic","Трафик"],["config","Конфигуратор"],["history","История"],["logs","Логи"],["access","Доступ"],["settings","Настройки"]];
 async function renderRouter(id, tab){
   clearTimers();
   try{ S.router = await get("/api/routers/" + id); }catch(e){ return handleErr(e); }
@@ -185,7 +227,7 @@ async function renderRouter(id, tab){
   drawPill();
   every(15000, async () => { try{ S.router = await get("/api/routers/" + id); drawPill(); if(S.tab==="overview") drawOverview(); }catch(e){} });
   const body = $("#tabBody");
-  ({overview:tabOverview, traffic:tabTraffic, config:tabConfig, history:tabHistory, logs:tabLogs, access:tabAccess, settings:tabSettings})[S.tab](body, r);
+  ({overview:tabOverview, proxies:tabProxies, traffic:tabTraffic, config:tabConfig, history:tabHistory, logs:tabLogs, access:tabAccess, settings:tabSettings})[S.tab](body, r);
 }
 function drawPill(){
   const r = S.router, p = $("#rpill"); if(!p) return;
@@ -196,6 +238,7 @@ const canEdit = () => S.router && S.router.role !== "viewer";
 function tabOverview(body){
   body.innerHTML = `<div id="ov"></div>`;
   drawOverview();
+  latestFleet().then(v => { if(v && v !== S.latest){ S.latest = v; drawOverview(); } });
 }
 function drawOverview(){
   const el = $("#ov"); if(!el) return;
@@ -210,7 +253,7 @@ function drawOverview(){
         <div><b>Аптайм</b><span>${st.uptime ? dur(st.uptime) : "—"}</span></div>
         <div><b>Нагрузка</b><span>${(st.load||[]).map(x => (+x).toFixed(2)).join(" / ") || "—"}</span></div>
         <div><b>Память</b><span>${m.total ? `${bytes(m.total - m.available)} из ${bytes(m.total)}` : "—"}</span></div>
-        <div><b>Агент</b><span>${esc(r.agent_version || "—")}</span></div>
+        <div><b>nikki-fleet</b><span>${esc(r.agent_version || "—")}${needsUpdate(r) ? ` · <span class="warn-t">доступна ${esc(S.latest)}</span>${r.role==="owner" && r.online ? ` <button class="small primary" id="aUpdate">Обновить</button>` : ""}` : S.latest && r.agent_version ? ` <span class="muted small">последняя</span>` : ""}</span></div>
       </div>
     </div>
     <div class="panel">
@@ -238,6 +281,7 @@ function drawOverview(){
       </div>
     </div>
     <div class="note small">Полная настройка — на вкладке «Конфигуратор»: подписки, правила, группы и клиенты, с сохранением прямо на роутер.</div>`;
+  $("#aUpdate")?.addEventListener("click", () => updateDialog(S.router));
   $("#aReload")?.addEventListener("click", async e => {
     const b = e.currentTarget; b.disabled = true; b.textContent = "Перезапускаю…";
     try{ const d = await cmd(S.router.id, "nikki.reload"); flash(d.api ? "Nikki перезапущен, mihomo отвечает" : "Nikki перезапущен, но mihomo пока не отвечает", !d.api); }
