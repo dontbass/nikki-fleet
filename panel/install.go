@@ -31,12 +31,17 @@ trap 'rm -rf "$TMP"' EXIT
 say "загружаю последний релиз $REPO"
 URLS=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | grep -o '"browser_download_url": *"[^"]*\.'"$EXT"'"' | cut -d'"' -f4)
 [ -n "$URLS" ] || fail "не нашёл пакеты .$EXT в релизе"
+SEEN=" "
 for u in $URLS; do
-	f="$TMP/$(basename "$u")"
-	case "$(basename "$u")" in
+	b="$(basename "$u")"
+	case "$b" in
 		luci-*) [ -d /www/luci-static ] || continue ;;
 	esac
-	curl -fsSL -o "$f" "$u"
+	# one file per package, even if a release accidentally holds two versions
+	case "$b" in *.ipk) n="${b%%_*}" ;; *) n="$(echo "$b" | sed -E 's/-[0-9][^-]*(-r[0-9]+)?\.apk$//')" ;; esac
+	case "$SEEN" in *" $n "*) continue ;; esac
+	SEEN="$SEEN$n "
+	curl -fsSL -o "$TMP/$b" "$u"
 done
 
 say "устанавливаю пакеты"
