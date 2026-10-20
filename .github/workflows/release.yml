@@ -22,11 +22,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ "${GITHUB_REF_TYPE}" = tag ]; then V="${GITHUB_REF_NAME#v}"; else V="$(cat VERSION | tr -d '[:space:]')"; fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "tag=v$V" >> "$GITHUB_OUTPUT"
-          if [ "${GITHUB_REF_TYPE}" != tag ] && git ls-remote --exit-code --tags origin "refs/tags/v$V" >/dev/null; then
+          # skip only if this version is already fully released (packages attached)
+          if [ "${GITHUB_REF_TYPE}" != tag ] && gh release view "v$V" -R "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' 2>/dev/null | grep -q '\.ipk$'; then
             echo "skip=true" >> "$GITHUB_OUTPUT"; echo "v$V already released"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
@@ -41,31 +44,36 @@ jobs:
           generate_release_notes: true
 
   packages:
-    name: packages ${{ matrix.branch }}
+    # both OpenWrt branches in one job, uploaded with one command (parallel
+    # uploads to the same release are flaky)
     needs: meta
     if: needs.meta.outputs.skip != 'true'
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        branch: [ openwrt-24.10, openwrt-25.12 ]
     steps:
       - uses: actions/checkout@v6
-      - run: cp -r openwrt/* .
-      - uses: openwrt/gh-action-sdk@main
+      - run: cp -r openwrt/* . && mkdir -p dist
+      - name: build for OpenWrt 24.10 (ipk)
+        uses: openwrt/gh-action-sdk@main
         env:
-          ARCH: x86_64-${{ matrix.branch }}
+          ARCH: x86_64-openwrt-24.10
           FEEDNAME: nikki_fleet
           PACKAGES: nikki-fleet luci-app-nikki-fleet
-          EXTRA_FEEDS: src-git|nikki|https://github.com/nikkinikki-org/OpenWrt-nikki.git;main
           NO_REFRESH_CHECK: true
           INDEX: 0
-      - uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.meta.outputs.tag }}
-          fail_on_unmatched_files: false
-          files: |
-            bin/packages/x86_64/nikki_fleet/*.ipk
-            bin/packages/x86_64/nikki_fleet/*.apk
+      - run: sudo cp bin/packages/x86_64/nikki_fleet/*.ipk dist/ && sudo rm -rf bin
+      - name: build for OpenWrt 25.12 (apk)
+        uses: openwrt/gh-action-sdk@main
+        env:
+          ARCH: x86_64-openwrt-25.12
+          FEEDNAME: nikki_fleet
+          PACKAGES: nikki-fleet luci-app-nikki-fleet
+          NO_REFRESH_CHECK: true
+          INDEX: 0
+      - run: sudo cp bin/packages/x86_64/nikki_fleet/*.apk dist/ && ls -la dist
+      - name: upload to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ needs.meta.outputs.tag }}" dist/* --clobber -R "${{ github.repository }}"
 
   panel-binaries:
     needs: meta
@@ -86,10 +94,11 @@ jobs:
             name=nikki-fleet-panel-${os}-${arch}${arm:+v$arm}
             GOOS=$os GOARCH=$arch GOARM=$arm CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=$V" -o ../dist/$name .
           done
-      - uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.meta.outputs.tag }}
-          files: dist/*
+      - name: upload to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ needs.meta.outputs.tag }}" ../dist/* --clobber -R "${{ github.repository }}"
+        working-directory: panel
 
   docker:
     needs: meta

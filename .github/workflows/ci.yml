@@ -42,7 +42,6 @@ jobs:
           ARCH: x86_64-${{ matrix.branch }}
           FEEDNAME: nikki_fleet
           PACKAGES: nikki-fleet luci-app-nikki-fleet
-          EXTRA_FEEDS: src-git|nikki|https://github.com/nikkinikki-org/OpenWrt-nikki.git;main
           NO_REFRESH_CHECK: true
           INDEX: 0
       - uses: actions/upload-artifact@v7
