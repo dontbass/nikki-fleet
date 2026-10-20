@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    tags: [ 'v*' ]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  packages:
+    name: packages ${{ matrix.branch }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        branch: [ openwrt-24.10, openwrt-25.12 ]
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp -r openwrt/* .
+      - uses: openwrt/gh-action-sdk@main
+        env:
+          ARCH: x86_64-${{ matrix.branch }}
+          FEEDNAME: nikki_fleet
+          PACKAGES: nikki-fleet luci-app-nikki-fleet
+          EXTRA_FEEDS: src-git|nikki|https://github.com/nikkinikki-org/OpenWrt-nikki.git;main
+          NO_REFRESH_CHECK: true
+          INDEX: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages-${{ matrix.branch }}
+          path: |
+            bin/packages/x86_64/nikki_fleet/*.ipk
+            bin/packages/x86_64/nikki_fleet/*.apk
+          if-no-files-found: error
+
+  panel-binaries:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: build
+        working-directory: panel
+        run: |
+          V=${GITHUB_REF_NAME#v}
+          mkdir -p ../dist
+          for t in linux/amd64 linux/arm64 linux/arm/7; do
+            os=${t%%/*}; rest=${t#*/}; arch=${rest%%/*}; arm=${rest#*/}; [ "$arm" = "$rest" ] && arm=""
+            name=nikki-fleet-panel-${os}-${arch}${arm:+v$arm}
+            GOOS=$os GOARCH=$arch GOARM=$arm CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=$V" -o ../dist/$name .
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: panel-binaries
+          path: dist/*
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: panel
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: VERSION=${{ github.ref_name }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/nikki-fleet-panel:${{ github.ref_name }}
+            ghcr.io/${{ github.repository_owner }}/nikki-fleet-panel:latest
+
+  release:
+    needs: [ packages, panel-binaries ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: assets/*
+          generate_release_notes: true

@@ -1,0 +1,24 @@
+{
+	"admin/services/nikki/configurator": {
+		"title": "Configurator",
+		"order": 15,
+		"action": {
+			"type": "view",
+			"path": "nikki-fleet/configurator"
+		},
+		"depends": {
+			"acl": [ "luci-app-nikki-fleet" ]
+		}
+	},
+	"admin/services/nikki/fleet": {
+		"title": "Remote management",
+		"order": 70,
+		"action": {
+			"type": "view",
+			"path": "nikki-fleet/fleet"
+		},
+		"depends": {
+			"acl": [ "luci-app-nikki-fleet" ]
+		}
+	}
+}

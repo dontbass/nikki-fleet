@@ -1,0 +1,1953 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mihomo Конфигуратор</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<script src="js-yaml.min.js"></script>
+<script>window.jsyaml || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"><\/script>')</script>
+<style>
+/* Layout: tabbed editor (subscriptions / rules / groups) on the left, live YAML + problems on the right; stacks on phones */
+:root{
+  --bg:#f3f5f7; --panel:#ffffff; --fg:#17202a; --muted:#5c6b7a; --line:#d9dfe6;
+  --accent:#2f5d8a; --accent-ink:#ffffff; --soft:#e7eef5; --warn:#a4471c; --ok:#2d7a4b;
+  --code-bg:#0f1720; --code-fg:#d6e2ee;
+  --c-direct:#2d7a4b; --c-reject:#b23a3a;
+  --c1:#2f5d8a; --c2:#9a6420; --c3:#6b4a8f; --c4:#23808a; --c5:#a03a6c; --c6:#5f6f12;
+  --f-ui:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e141a; --panel:#151d26; --fg:#e3eaf1; --muted:#8fa0b1; --line:#26323e;
+  --accent:#6fa3d6; --accent-ink:#0b1219; --soft:#1c2834; --warn:#e08a5f; --ok:#6cc08f;
+  --code-bg:#0a0f14; --code-fg:#cfdbe7;
+  --c-direct:#5fbf86; --c-reject:#e06a6a;
+  --c1:#6fa3d6; --c2:#d9a35a; --c3:#a88bd0; --c4:#5cc0c9; --c5:#d97aa6; --c6:#b5c45a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e141a; --panel:#151d26; --fg:#e3eaf1; --muted:#8fa0b1; --line:#26323e;
+  --accent:#6fa3d6; --accent-ink:#0b1219; --soft:#1c2834; --warn:#e08a5f; --ok:#6cc08f;
+  --code-bg:#0a0f14; --code-fg:#cfdbe7;
+  --c-direct:#5fbf86; --c-reject:#e06a6a;
+  --c1:#6fa3d6; --c2:#d9a35a; --c3:#a88bd0; --c4:#5cc0c9; --c5:#d97aa6; --c6:#b5c45a; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-ui);font-size:14px;line-height:1.45;padding-inline:16px;padding-block:20px 40px}
+.wrap{max-width:1360px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px}
+h1{font-size:20px;font-weight:600;margin:0;text-wrap:balance}
+h1 small{font-family:var(--f-mono);font-weight:400;font-size:12px;color:var(--muted);margin-left:8px}
+h2{font-size:15px;font-weight:600;margin:6px 0 0}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button,.btn{font:inherit;font-size:13px;font-weight:500;border:1px solid var(--line);background:var(--panel);color:var(--fg);padding:7px 12px;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+button:hover,.btn:hover{border-color:var(--accent)}
+button:disabled{opacity:.45;cursor:default;border-color:var(--line)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,.btn:focus-within,a:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button.ghost{background:transparent}
+button.danger{color:var(--warn)}
+button.sm,.btn.sm{padding:4px 9px;font-size:12px}
+.btn input{display:none}
+.muted{color:var(--muted)}
+.small{font-size:12px}
+code{font-family:var(--f-mono);font-size:.92em}
+
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto}
+.tab{border:none;border-bottom:2px solid transparent;border-radius:0;background:transparent;padding:9px 14px;color:var(--muted);font-size:14px}
+.tab:hover{border-color:transparent;color:var(--fg)}
+.tab[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--accent)}
+.tab .n{font-family:var(--f-mono);font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+.grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px;align-items:start}
+.grid.noyaml{grid-template-columns:minmax(0,1fr)}
+.grid.noyaml .out{display:none}
+@media (max-width:960px){.grid{grid-template-columns:minmax(0,1fr)}}
+.col{display:flex;flex-direction:column;gap:12px;min-width:0}
+.note{font-size:12.5px;color:var(--muted);background:var(--soft);border-radius:6px;padding:8px 12px}
+.note b{color:var(--fg)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.bulk{flex-direction:row;flex-wrap:wrap;align-items:end;gap:8px}
+.bulk .lbl{width:100%}
+
+.prov{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.prov.off{opacity:.55}
+.prov.off .body{display:none}
+.phead{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.phead .name{flex:1 1 160px;min-width:0}
+.switch{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;user-select:none}
+.switch input{width:16px;height:16px;accent-color:var(--accent);margin:0}
+.body{display:flex;flex-direction:column;gap:10px}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+label.f{display:flex;flex-direction:column;gap:3px;min-width:0}
+label.f>span{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:600}
+input[type=text],input[type=number],input[type=search],select,textarea{font:inherit;font-size:13px;width:100%;min-width:0;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:6px;padding:6px 8px}
+input.mono,textarea,select.mono{font-family:var(--f-mono);font-size:12.5px}
+input.name{font-weight:600;font-size:14px}
+.inline{display:flex;gap:6px;min-width:0}
+.inline input{flex:1}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chips .t{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-right:2px}
+.chip{font-family:var(--f-mono);font-size:12px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer}
+.chip.on{background:var(--soft);color:var(--fg);border-color:var(--accent)}
+.chips select{width:auto;font-size:12px;padding:3px 6px;border-radius:999px}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
+
+/* nodes */
+.nodes{border-top:1px dashed var(--line);padding-top:10px;display:flex;flex-direction:column;gap:8px}
+.nodesum{font-size:12.5px;display:flex;flex-wrap:wrap;gap:4px 10px;font-variant-numeric:tabular-nums}
+.nodelist{max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:6px}
+.node{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:1px 10px;padding:6px 10px;border-bottom:1px solid var(--line);font-size:13px}
+.node:last-child{border-bottom:none}
+.node.ex{opacity:.45}
+.node .nn{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.node .srv{font-family:var(--f-mono);font-size:11px;color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.node .proto{font-family:var(--f-mono);font-size:11px;color:var(--muted);text-align:right}
+.node .tags{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+.tag{font-family:var(--f-mono);font-size:10.5px;padding:1px 7px;border-radius:999px;background:var(--soft);color:var(--fg);white-space:nowrap}
+.tag.x{color:var(--warn);background:transparent;border:1px solid var(--line)}
+
+/* rules */
+.tester .tout{font-size:13px;display:flex;flex-direction:column;gap:4px}
+.tester ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:3px}
+.tester li.maybe{color:var(--muted)}
+.tester li.hit{font-weight:500}
+.tester ul{margin:2px 0 0;padding-left:18px}
+.badge{font-size:11px;font-weight:500;padding:1px 7px;border-radius:999px;background:var(--soft);color:var(--muted);white-space:nowrap}
+.rtools{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.rtools input{flex:1 1 160px;width:auto}
+.legend{display:flex;flex-wrap:wrap;gap:6px}
+.legend .chip{display:inline-flex;align-items:center;gap:6px}
+.legend .ic{width:20px;height:20px;border-radius:5px}.legend .ic svg{width:13px;height:13px}.legend .ic img{width:18px;height:18px}
+.rules{display:flex;flex-direction:column;gap:5px}
+.rule{display:flex;flex-wrap:wrap;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 8px 5px 4px;min-width:0}
+.rule.bad{border-color:var(--warn)}
+.rule.dead{opacity:.5}
+.rule.dragging{box-shadow:0 8px 24px rgba(0,0,0,.22);border-color:var(--accent);position:relative;z-index:3}
+.rules.sorting{user-select:none}
+.handle{cursor:grab;touch-action:none;border:none;background:transparent;color:var(--muted);padding:6px 6px;font-family:var(--f-mono);letter-spacing:-2px;font-size:13px;line-height:1}
+.handle:hover{color:var(--fg)}
+.handle.off{cursor:default;opacity:.3}
+.rules.sorting .handle{cursor:grabbing}
+.idx{font-family:var(--f-mono);font-size:11px;color:var(--muted);width:2.2em;text-align:right;font-variant-numeric:tabular-nums}
+.rule .rtype{flex:0 0 152px;width:152px}
+.rule .rval{flex:1 1 170px;width:auto}
+.rule span.rval{font-size:12.5px;padding:0 8px}
+.rule .arrow{color:var(--muted)}
+.rule .rtarget{flex:0 0 140px;width:140px;font-weight:500;border-color:var(--tc);background:color-mix(in srgb,var(--tc) 16%,var(--bg))}
+.rule .x{padding:4px 9px;color:var(--muted)}
+.rule .x:hover{color:var(--warn)}
+.rule .issue{width:100%;font-size:12px;color:var(--warn);padding-left:56px}
+.rpgrid,.ggrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+
+/* groups */
+.ghead{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.ghead .name{flex:1 1 140px;width:auto}
+.ghead select{flex:0 0 130px;width:130px}
+.gmeta{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.member{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:999px;overflow:hidden}
+.member button{border:none;border-radius:0;background:transparent;padding:3px 8px;font-family:var(--f-mono);font-size:12px;color:var(--fg)}
+.member button+button{padding:3px 7px 3px 2px;color:var(--muted)}
+.member.first{border-color:var(--accent);background:var(--soft)}
+.member.bad{border-color:var(--warn)}
+.member.bad button{color:var(--warn)}
+.gnodes{display:flex;flex-wrap:wrap;gap:4px}
+.gfoot{display:flex;gap:6px;justify-content:flex-end}
+
+/* icons */
+.ic{width:30px;height:30px;border-radius:8px;display:inline-grid;place-items:center;flex:none;padding:0;border:none;
+  background:color-mix(in srgb,var(--tc,var(--accent)) 15%,var(--panel));color:color-mix(in srgb,var(--tc,var(--accent)) 85%,var(--fg));overflow:hidden}
+.ic svg{width:18px;height:18px}
+.ic img{width:26px;height:26px;object-fit:contain}
+.ic.lt{--tc:var(--lc);font-weight:600;font-size:12px;letter-spacing:-.02em;font-family:var(--f-ui)}
+.ic .em{font-size:17px;line-height:1}
+button.ic{cursor:pointer}
+button.ic:hover{box-shadow:0 0 0 2px var(--accent);border-color:transparent}
+.ic.lg{width:38px;height:38px;border-radius:10px}
+.ic.lg svg{width:22px;height:22px}.ic.lg img{width:32px;height:32px}.ic.lg.lt{font-size:14px}
+#iconDlg{width:min(760px,calc(100vw - 32px))}
+#iconDlg .tabs{margin:8px 0}
+.icgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:6px;max-height:52vh;overflow:auto;padding:2px}
+.icgrid button{flex-direction:column;gap:4px;padding:8px 4px;font-size:10.5px;font-weight:400;color:var(--muted);min-width:0}
+.icgrid button span.cap{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.icgrid img{width:36px;height:36px;object-fit:contain}
+.icgrid svg{width:24px;height:24px;color:var(--fg)}
+
+/* clients */
+.seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--bg)}
+.seg button{border:none;border-radius:0;background:transparent;padding:6px 12px;color:var(--muted)}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.client .ipin{flex:0 1 170px;width:170px}
+.cstat{font-size:12.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
+.cstat.warn{color:var(--warn)}
+.copt{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:13px}
+.copt select{width:auto}
+
+/* router */
+.dl{font-family:var(--f-mono);font-size:11px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.dl.good{color:var(--ok)}.dl.mid{color:var(--c2)}.dl.bad{color:var(--warn)}
+.live{font-size:12.5px;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;background:var(--soft);border-radius:6px;padding:6px 10px}
+.live select{width:auto;max-width:100%;min-width:0}
+.tab .ok{color:var(--ok)}
+
+/* host bar (LuCI / panel) */
+.hostbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.hostbar .src{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.hostbar select{width:auto;max-width:100%;min-width:0;flex:0 1 260px}
+.hostbar .dirty{font-size:12.5px;color:var(--warn)}
+.hostbar .clean{font-size:12.5px;color:var(--ok)}
+.hostbar .grow{flex:1 1 auto}
+.hostres{font-size:12.5px;white-space:pre-wrap;font-family:var(--f-mono);max-height:180px;overflow:auto}
+
+/* output */
+.out{position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px);display:flex;flex-direction:column;gap:8px;min-width:0}
+.outhead{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
+.outhead .meta{font-family:var(--f-mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.fname{width:170px!important}
+.problems{font-size:12.5px;color:var(--warn);background:color-mix(in srgb,var(--warn) 9%,var(--panel));border:1px solid color-mix(in srgb,var(--warn) 35%,var(--line));border-radius:6px;padding:8px 12px;max-height:150px;overflow:auto}
+.problems ul{margin:0;padding-left:18px}
+pre#yaml{margin:0;background:var(--code-bg);color:var(--code-fg);font-family:var(--f-mono);font-size:12px;line-height:1.5;border-radius:8px;padding:14px;overflow:auto;max-height:calc(100vh - 190px);white-space:pre;tab-size:2}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:60;background:var(--panel);border:1px solid var(--line);box-shadow:0 6px 24px rgba(0,0,0,.18);border-radius:999px;padding:8px 16px;max-width:calc(100vw - 32px);font-size:13px;color:var(--ok);text-align:center}
+#toast.err{color:var(--warn)}
+#toast:empty{display:none}
+.row3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+@media (max-width:620px){.row3{grid-template-columns:minmax(0,1fr)}}
+.err{font-size:12.5px;color:var(--warn)}
+dialog{border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--fg);width:min(720px,calc(100vw - 32px));padding:16px}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+dialog textarea{height:50vh;resize:vertical}
+dialog .bar{margin-top:10px;justify-content:flex-end}
+/* mobile nav */
+.mnav{display:none;position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--panel);border-top:1px solid var(--line);grid-template-columns:repeat(6,minmax(0,1fr));gap:2px;padding:4px 4px calc(4px + env(safe-area-inset-bottom,0px))}
+.mnav button{flex-direction:column;justify-content:center;gap:2px;border:none;background:transparent;padding:6px 0;font-size:10.5px;font-weight:500;color:var(--muted);min-height:54px;position:relative;border-radius:10px;min-width:0}
+.mnav button:hover{border:none}
+.mnav button svg{width:22px;height:22px}
+.mnav button[aria-selected="true"]{color:var(--accent);background:var(--soft)}
+.mnav .b{position:absolute;top:3px;left:calc(50% + 6px);min-width:16px;height:16px;border-radius:8px;background:var(--warn);color:var(--panel);font-size:10px;line-height:16px;padding:0 4px;font-variant-numeric:tabular-nums}
+.mnav .b.ok{background:var(--ok);min-width:8px;width:8px;height:8px;padding:0;top:8px}
+@media (max-width:720px){
+  body{padding-block:12px calc(80px + env(safe-area-inset-bottom,0px))}
+  .wrap{gap:12px}
+  .tabs{display:none}
+  .mnav{display:grid}
+  #toast{bottom:calc(76px + env(safe-area-inset-bottom,0px))}
+  header{gap:8px}
+  h1{font-size:17px;min-width:0;max-width:100%}
+  h1 small{display:block;margin:2px 0 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  header .bar{width:100%;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+  header .bar>*{justify-content:center;padding:6px 4px;font-size:13px;white-space:nowrap;overflow:hidden}
+  #yamlToggle{display:none}
+  .grid,.grid.noyaml{grid-template-columns:minmax(0,1fr)}
+  .grid .out,.grid.noyaml .out{display:none;position:static}
+  body.m-yaml .grid .out{display:flex}
+  body.m-yaml #main{display:none}
+  pre#yaml{max-height:none;font-size:11.5px}
+  .outhead .bar{width:100%}
+  .fname{flex:1 1 100%;width:100%!important}
+  input[type=text],input[type=number],input[type=search],input[type=password],select,textarea{font-size:16px;padding:8px 10px}
+  button,.btn{min-height:42px}
+  button.sm,.btn.sm{min-height:36px}
+  .chip{padding:6px 11px}
+  .member button{padding:7px 9px}
+  .row,.row3{grid-template-columns:minmax(0,1fr)!important}
+  .panel,.prov{padding:12px}
+  .rule{display:grid;grid-template-columns:30px 30px minmax(0,1fr) auto auto;grid-template-areas:"n ic ty ty x" "h va va va va" "h tg tg nr nr" "is is is is is";gap:6px;padding:8px 8px 8px 4px}
+  .rule .idx{grid-area:n;width:auto;text-align:center;align-self:center}
+  .rule .handle{grid-area:h;align-self:stretch;font-size:16px;min-height:44px}
+  .rule .ic{grid-area:ic}
+  .rule .rtype{grid-area:ty;width:100%;flex:none}
+  .rule .rval{grid-area:va;width:100%;flex:none}
+  .rule span.rval{align-self:center}
+  .rule .arrow{display:none}
+  .rule .rtarget{grid-area:tg;width:100%;flex:none}
+  .rule .switch{grid-area:nr}
+  .rule .x{grid-area:x;min-height:40px;min-width:40px;justify-content:center}
+  .rule .issue{grid-area:is;padding-left:4px}
+  .rtools input{flex:1 1 100%}
+  .ghead select{flex:1 1 100%;width:100%}
+  .client .ipin{flex:1 1 100%;width:100%}
+  .seg{display:flex;width:100%}
+  .seg button{flex:1 1 0;padding:8px 4px;font-size:13px}
+  .node{padding:8px 10px}
+  .live{padding:8px 10px}
+  .live select{flex:1 1 100%}
+  dialog,#iconDlg{width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;margin:0;border:none;border-radius:0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px))}
+  dialog textarea{height:58vh}
+  .icgrid{grid-template-columns:repeat(auto-fill,minmax(68px,1fr));max-height:calc(100dvh - 300px)}
+}
+@media (max-width:560px){.rule .rtype,.rule .rtarget{flex:1 1 120px;width:auto}.rule .issue{padding-left:8px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Mihomo конфигуратор <small id="srcname">пример</small></h1>
+    <div class="bar">
+      <label class="btn">Открыть .yaml<input type="file" id="file" accept=".yaml,.yml,.txt"></label>
+      <button id="pasteBtn">Вставить текст</button>
+      <button id="undoBtn" disabled title="Отменить последнее действие">↶ Отменить</button>
+      <button id="yamlToggle" class="ghost">Скрыть YAML</button>
+    </div>
+  </header>
+
+  <div class="hostbar" id="hostbar" hidden></div>
+  <div class="note" id="hint">Загружен <b>пример</b> с вымышленными ссылками. Откройте свой конфиг: всё, что здесь не редактируется (DNS, sniffer и т.д.), переносится в результат без изменений. Конфиг хранится только в этом браузере.</div>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" data-tab="subs" id="tab-subs">Подписки <span class="n" id="cnt-subs"></span></button>
+    <button class="tab" role="tab" data-tab="rules" id="tab-rules">Правила <span class="n" id="cnt-rules"></span></button>
+    <button class="tab" role="tab" data-tab="clients" id="tab-clients">Клиенты <span class="n" id="cnt-clients"></span></button>
+    <button class="tab" role="tab" data-tab="groups" id="tab-groups">Группы <span class="n" id="cnt-groups"></span></button>
+    <button class="tab" role="tab" data-tab="router" id="tab-router">Роутер <span class="n" id="cnt-router"></span></button>
+  </div>
+
+  <div class="grid" id="grid">
+    <div class="col" id="main"></div>
+
+    <div class="out">
+      <div class="outhead">
+        <div class="meta" id="meta"></div>
+        <div class="bar">
+          <input type="text" id="fname" class="mono fname" value="config.yaml" aria-label="Имя файла" spellcheck="false">
+          <button id="applyBtn" class="primary" hidden title="Применить конфиг на роутере через API mihomo">На роутер</button>
+          <button id="saveBtn" class="primary">Сохранить .yaml</button>
+          <button id="copyBtn">Копировать</button>
+        </div>
+      </div>
+      <div class="problems" id="problems" hidden></div>
+      <pre id="yaml" tabindex="0"></pre>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" aria-live="polite"></div>
+<nav class="mnav" id="mnav" aria-label="Разделы"></nav>
+
+<dialog id="pasteDlg">
+  <label class="f"><span id="pasteTitle">Вставьте содержимое config.yaml</span><textarea id="pasteTa" spellcheck="false"></textarea><input type="text" id="newName" class="mono" hidden spellcheck="false"></label>
+  <div class="err" id="pasteErr"></div>
+  <div class="bar"><button id="pasteCancel" class="ghost">Отмена</button><button id="pasteOk" class="primary">Загрузить</button></div>
+</dialog>
+
+<dialog id="iconDlg">
+  <div class="bar" style="justify-content:space-between"><b id="icTitle">Иконка</b><button class="ghost sm" id="icClose" aria-label="Закрыть">✕</button></div>
+  <div class="tabs" role="tablist">
+    <button class="tab" data-ictab="own" id="ict-own">Значки</button>
+    <button class="tab" data-ictab="qure" id="ict-qure">Qure</button>
+    <button class="tab" data-ictab="url" id="ict-url">Своя ссылка</button>
+  </div>
+  <div class="col">
+    <input type="search" id="icSearch" placeholder="Поиск: youtube, telegram, russia…" aria-label="Поиск иконки">
+    <div class="icgrid" id="icGrid"></div>
+    <div class="inline" id="icUrlRow" hidden><input type="text" id="icUrlIn" class="mono" placeholder="https://…/icon.png" spellcheck="false"><button id="icUrlOk" class="primary">Применить</button></div>
+    <div class="note small" id="icNote"></div>
+    <div class="bar"><button id="icAuto">Сбросить на авто</button></div>
+  </div>
+</dialog>
+
+<script>
+const SAMPLE = `mode: rule
+ipv6: true
+log-level: error
+allow-lan: false
+tproxy-port: 7894
+external-controller: 0.0.0.0:9090
+dns:
+  enable: true
+  enhanced-mode: fake-ip
+  nameserver: [77.88.8.8, 77.88.8.2]
+proxy-providers:
+  MyVPN:
+    type: http
+    url: "https://example.com/sub/AAAA-BBBB"
+    path: ./myvpn.yaml
+    interval: 3600
+    lazy: true
+    health-check: {enable: true, url: http://gstatic.com/generate_204, interval: 180, timeout: 3000, expected-status: 204}
+    override: {skip-cert-verify: true}
+    header:
+      User-Agent: ["clash-meta"]
+      x-hwid: ["Router"]
+      x-device-os: ["OpenWrt"]
+      x-ver-os: ["25.12.1"]
+      x-device-model: ["Router"]
+  Backup:
+    type: http
+    url: "https://example.org/s/CCCC-DDDD"
+    path: ./backup.yaml
+    interval: 3600
+    lazy: true
+    health-check: {enable: true, url: http://gstatic.com/generate_204, interval: 180, timeout: 3000, expected-status: 204}
+    override: {skip-cert-verify: true}
+    exclude-filter: "(?i)shadowsocks|trojan"
+    header:
+      User-Agent: ["Happ"]
+      x-hwid: ["e1a2b3c4-d5e6-7f8a-9b0c-1d2e3f4a5b6c"]
+      x-device-os: ["Android"]
+      x-ver-os: ["14"]
+      x-device-model: ["SM-S918B"]
+proxy-groups:
+  - {name: Mode, type: select, proxies: [Auto, RU-Force]}
+  - {name: Auto, type: url-test, interval: 30, url: http://gstatic.com/generate_204, use: [MyVPN, Backup], exclude-filter: "(?i)🇷🇺|Russia|Россия"}
+  - {name: RU-Force, type: url-test, interval: 30, url: http://gstatic.com/generate_204, use: [MyVPN, Backup], filter: "(?i)🇷🇺|Russia|Россия"}
+  - {name: PROXY, type: select, proxies: [Auto, RU-Force]}
+  - {name: RU, type: fallback, interval: 30, url: http://gstatic.com/generate_204, proxies: [RU-Force, Mode]}
+rule-providers:
+  youtube:
+    behavior: classical
+    type: http
+    url: "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/YouTube/YouTube.yaml"
+    interval: 86400
+    proxy: PROXY
+    path: ./ruleset/youtube.yaml
+  russia-inside:
+    behavior: classical
+    type: http
+    url: "https://raw.githubusercontent.com/itdoginfo/allow-domains/main/Russia/inside-clashx.lst"
+    interval: 86400
+    proxy: PROXY
+    path: ./ruleset/russia-inside.yaml
+rules:
+  - DOMAIN-SUFFIX,okcdn.ru,DIRECT
+  - RULE-SET,youtube,PROXY
+  - RULE-SET,russia-inside,RU
+  - DOMAIN-SUFFIX,ru,RU
+  - GEOIP,RU,RU,no-resolve
+  - MATCH,Mode
+`;
+
+const PRESETS = {
+  router:  {label:"Роутер · OpenWrt (clash-meta)", ua:"clash-meta", hwid:"Router", os:"OpenWrt", ver:"25.12.1", model:"Router"},
+  android: {label:"Android · Happ", ua:"Happ", hwid:"@uuid", os:"Android", ver:"14", model:"SM-S918B"},
+  ios:     {label:"iPhone · Happ", ua:"Happ", hwid:"@uuid", os:"iOS", ver:"18.5", model:"iPhone16,2"},
+  windows: {label:"Windows · clash-verge", ua:"clash-verge/v2.2.3", hwid:"@uuid", os:"Windows", ver:"11", model:"PC"},
+};
+const HKEYS = [["ua","User-Agent"],["hwid","x-hwid"],["os","x-device-os"],["ver","x-ver-os"],["model","x-device-model"]];
+const RULE_TYPES = ["DOMAIN","DOMAIN-SUFFIX","DOMAIN-KEYWORD","DOMAIN-REGEX","GEOSITE","GEOIP","IP-CIDR","IP-CIDR6","IP-ASN","SRC-IP-CIDR","DST-PORT","SRC-PORT","IN-PORT","NETWORK","PROCESS-NAME","PROCESS-PATH","RULE-SET","AND","OR","NOT","MATCH"];
+const NO_RESOLVE = new Set(["GEOIP","IP-CIDR","IP-CIDR6","IP-ASN","RULE-SET"]);
+const HINTS = {"DOMAIN":"example.com","DOMAIN-SUFFIX":"example.com","DOMAIN-KEYWORD":"google","DOMAIN-REGEX":"^.*\\.example\\.com$","GEOSITE":"category-ads-all","GEOIP":"RU","IP-CIDR":"10.0.0.0/8","IP-CIDR6":"2001:db8::/32","IP-ASN":"13335","SRC-IP-CIDR":"192.168.1.0/24","DST-PORT":"443","SRC-PORT":"7777","IN-PORT":"7890","NETWORK":"udp","PROCESS-NAME":"telegram","PROCESS-PATH":"/usr/bin/curl","AND":"((DOMAIN,a.com),(NETWORK,UDP))","OR":"((DOMAIN,a.com),(DOMAIN,b.com))","NOT":"((DOMAIN,a.com))"};
+const BUILTIN = ["DIRECT","REJECT","REJECT-DROP","PASS"];
+const GTYPES = ["select","url-test","fallback","load-balance","relay"];
+const GTYPE_RU = {"select":"ручной выбор","url-test":"самый быстрый","fallback":"первый живой","load-balance":"балансировка","relay":"цепочка"};
+const STORE = "mihomo-cfg-v1", STORE_NODES = "mihomo-nodes-v1", STORE_UI = "mihomo-ui-v1";
+
+/* ---------- icons ---------- */
+const SVG = {
+  globe:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+  list:'<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>',
+  pin:'<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/>',
+  net:'<rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01M11 7h.01M11 17h.01"/>',
+  cpu:'<rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"/>',
+  port:'<path d="M9 3v5M15 3v5M6.5 8h11v3.5a5.5 5.5 0 0 1-11 0zM12 17v4"/>',
+  asterisk:'<path d="M12 4v16M5.1 8l13.8 8M18.9 8 5.1 16"/>',
+  logic:'<circle cx="9" cy="12" r="5.5"/><circle cx="15" cy="12" r="5.5"/>',
+  play:'<rect x="2.5" y="5" width="19" height="14" rx="4"/><path d="m10 9 5 3-5 3z"/>',
+  video:'<rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3z"/>',
+  chat:'<path d="M4 5h16v11H10l-6 4z"/>',
+  send:'<path d="M21 4 3 11l6.5 2.5L12 20l3-5.5zM9.5 13.5 21 4"/>',
+  music:'<path d="M9 18V5.5l11-2V16"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>',
+  game:'<rect x="2" y="7" width="20" height="10" rx="5"/><path d="M7 10v4M5 12h4"/><circle cx="15.5" cy="11" r=".8"/><circle cx="18" cy="13" r=".8"/>',
+  ban:'<circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/>',
+  shield:'<path d="M12 3 20 6v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
+  bolt:'<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
+  server:'<rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/>',
+  home:'<path d="M3 11 12 4l9 7v9h-6v-6H9v6H3z"/>',
+  arrow:'<path d="M4 12h15M13 6l6 6-6 6"/>',
+  mail:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+  cloud:'<path d="M7 18h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.1 9.6 4.2 4.2 0 0 0 7 18z"/>',
+  code:'<path d="m8 7-5 5 5 5M16 7l5 5-5 5"/>',
+  ai:'<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/>',
+  cart:'<path d="M3 4h2l2.5 11h10L20 7H6.4"/><circle cx="9" cy="19.5" r="1.5"/><circle cx="17" cy="19.5" r="1.5"/>',
+  bank:'<path d="M3 10 12 4l9 6M5 10v8M10 10v8M14 10v8M19 10v8M3 20.5h18"/>',
+  download:'<path d="M12 3v12M7 10l5 5 5-5M4 20.5h16"/>',
+  lock:'<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/>',
+  star:'<path d="m12 3 2.8 5.8 6.2.9-4.5 4.4 1 6.2-5.5-3-5.5 3 1-6.2L3 9.7l6.2-.9z"/>',
+  tv:'<rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8M12 17v4"/>',
+  phone:'<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/>',
+  rocket:'<path d="M9.5 15 6 11.5C7.2 7 11 3.5 20 3.5 20 12.5 16.5 16.3 12 17.5zM6.8 14.8C5 16 4 20 4 20s4-1 5.2-2.8"/><circle cx="14.5" cy="9" r="1.6"/>',
+  gauge:'<path d="M3.5 18a8.5 8.5 0 1 1 17 0"/><path d="m12 18 4.5-6"/>',
+  stack:'<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
+  scale:'<path d="M12 4v16M6 7h12M8 20h8"/><path d="m6 7-3 6.5h6zM18 7l-3 6.5h6z"/>',
+  link:'<path d="M10 14a4 4 0 0 0 5.7 0l3.1-3.1a4 4 0 0 0-5.7-5.7l-1.2 1.2M14 10a4 4 0 0 0-5.7 0l-3.1 3.1a4 4 0 0 0 5.7 5.7l1.2-1.2"/>',
+  pointer:'<path d="M5 3l14 7-6.2 1.8L10.5 18z"/><path d="m13 12 5 6"/>',
+  wifi:'<path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.5a9.5 9.5 0 0 1 13 0M8.8 16a5 5 0 0 1 6.4 0"/><circle cx="12" cy="19.5" r="1"/>',
+  news:'<path d="M4 5h12v14H6a2 2 0 0 1-2-2zM16 8h4v9a2 2 0 0 1-2 2M7.5 9h5M7.5 12.5h5M7.5 16h3"/>',
+  book:'<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5zM4 20.5A2.5 2.5 0 0 0 6.5 23H20"/>',
+  heart:'<path d="M12 20s-7.5-4.6-7.5-10.3A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.5C19.5 15.4 12 20 12 20z"/>',
+  car:'<path d="M5 16V11.5L7 6.5h10l2 5V16M3 16h18v2.5H3z"/><circle cx="7.5" cy="16" r="1.6"/><circle cx="16.5" cy="16" r="1.6"/>',
+  question:'<circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1.1.9-1.1 1.6v.6M12 17h.01"/>',
+  flagru:null,
+};
+const SVG_RU = {flagru:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="2" fill="#fff" stroke="currentColor" stroke-opacity=".35"/><rect x="2.5" y="9.67" width="19" height="4.67" fill="#1c57a5"/><path d="M2.5 14.33h19V17a2 2 0 0 1-2 2h-15a2 2 0 0 1-2-2z" fill="#d52b1e"/></svg>'};
+const SVG_RU_LABEL = {globe:"сайт",list:"список",pin:"гео",net:"сеть",cpu:"процесс",port:"порт",asterisk:"всё",logic:"логика",play:"видео",video:"камера",chat:"чат",send:"мессенджер",music:"музыка",game:"игры",ban:"блок",shield:"защита",bolt:"скорость",server:"сервер",home:"дом",arrow:"напрямую",mail:"почта",cloud:"облако",code:"код",ai:"ИИ",cart:"магазин",bank:"банк",download:"загрузки",lock:"замок",star:"звезда",tv:"ТВ",phone:"телефон",rocket:"ракета",gauge:"пинг",stack:"резерв",scale:"баланс",link:"цепочка",pointer:"выбор",wifi:"wi-fi",news:"новости",book:"книги",heart:"сердце",car:"авто",question:"?",flagru:"Россия"};
+const svgIcon = k => k==="flagru" ? SVG_RU.flagru : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SVG[k]||SVG.globe}</svg>`;
+const QURE_BASE = "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/";
+const QURE = "5iTV|AGA|AI|AIA|AR|AU|AbemaTV|AdBlack|AdWhite|Advertising|AfreecaTV|Africa_Map|Airport|Alibaba|All4|Amazon|Amazon_1|America_Map|AmyTelecom|AmyTelecom_1|Apeach|App_Store|Apple|Apple_1|Apple_2|Apple_Fitness+|Apple_Fitness+_Letter|Apple_Fitness|Apple_Music|Apple_News|Apple_TV|Apple_TV_Plus|Apple_Update|Area|Argentina|Asia_Map|Australia|Auto|Available|Available_1|Azure|BBC_iPlayer|BBC_iPlayer_1|BBC_iPlayer_2|BGP|BR|Back|Bahamut|Bamboo|Blackhole|Blinkload|Blinkload_1|Bookpedia|BosLife|BosLife_1|Bot|Brazil|Brown|Bypass|CA|CC|CN|Canada|Cat|Catnet|Cellular|ChatGPT|China|China_Map|Cloudflare|Clubhouse|Clubhouse_1|Clubhouse_2|Copilot|CreamData|Cryptocurrency|Cryptocurrency_1|Cryptocurrency_2|Cryptocurrency_3|Cydia|DAZN|DAZN_1|DAZN_2|DE|Daily|Dinosaur|Direct|Discord|Disney+|Disney+_1|Disney+_2|Disney|Domestic|DomesticMedia|Download|Drill|EG|ESPN+|ESPN+_1|ESPN+_2|EU|Egypt|Emby|Epic_Games|Europe_Map|European_Union|FI|FOX|FR|Facebook|Filter|Final|Final_1|Find_My|Finland|Flamingo|ForeignMedia|France|Fries|Frog|GIA|Game|Germany|GitHub|GitHub_Letter|Global|Gmail|Google|Google_Drive|Google_Opinion_Rewards|Google_Search|HBO|HBO_1|HBO_2|HBO_GO|HBO_GO_1|HBO_GO_2|HBO_Max|HC|HK|HKMTMedia|Heart|Hijacking|Hong_Kong|Hulu|Hulu_1|IEPL|IN|IPLC|ITV|ITV_1|ITV_2|India|Infuse|Infuse_7|Ingress|Instagram|JOOX|JP|Japan|KKBOX|KKTV|KR|Kakao|Korea|LA|LA_Map|LOL|Lab|Lambda|League_of_Legends|LiTV|Line|LineTV|LinkCube|Linkedin|Lock|Loop|Luffy|MO|MY|Macao|Magic|Mail|Malaysia|Media|Mickey|Microsoft|Mouse|Music_Enhance|My5|NBA|NBC|Naiko|Netease_Music|Netease_Music_Unlock|Netflix|Netflix_Letter|Nfcloud|Ninja|Nintendo|Notion|Null_Nation|Oceania_Map|OneDrive|Ox|PBS|PH|Panda|Pandora|Paramount|PayPal|Peacock|Peacock_1|Peacock_2|Philippines|Pig|Pirate_Nation|PlayStation|PlayStation_1|PostBox|PostBox_1|Prime_Video|Prime_Video_1|Prime_Video_2|Proxy|Puzzle|QQ|Quantumult_X|Qure|RU|Rainbow|Rainbow_1|Reject|Renzhe|Ring|Rocket|Round_Robin|Round_Robin_1|Russia|Ryan|SG|SSID|SSID_1|SSL|STARZ|Scholar|Server|Singapore|Siri|Sling_TV|Spark|Speedtest|Spotify|Stack|Star+|Star|Star_1|Star_2|Static|Static_1|Steam|Streaming!CN|Streaming|StreamingCN|StreamingSE|TAG|TH|TIDAL|TIDAL_1|TIDAL_2|TR|TVB|TW|Taiwan|Taobao|Telegram|Telegram_X|TestFlight|TestFlight_1|TestFlight_2|Thailand|TikTok|TikTok_1|TikTok_2|Tubi|Turkey|Twitch|Twitter|UA|UK|ULB|ULB_1|UN|US|Ukraine|United_Kingdom|United_Nations|United_States|United_States_Map|Unlock|VIP|Vimeo|Viu|ViuTV|Want_Want|Want_Want_1|WeChat|WeTV|WeTV_Letter|Weibo|WiFi|Windows|Windows_11|World_Map|X|Xbox|Yahoo|Yahoo_1|YouTube|YouTube_Letter|YouTube_Music|bilibili|bilibili_1|bilibili_2|bilibili_3|bilibili_4|deezer|deezer_1|deezer_2|discovery+|encoreTVB|friDay|fuboTV|iCloud|iQIYI&bilibili|iQIYI|iQIYI_1|myTV_SUPER|niconico|niconico_1|niconico_2|nowe|ssLinks".split("|");
+const qureUrl = n => QURE_BASE + n + ".png";
+const AUTO = [
+  [/youtube/,"YouTube","play"],[/telegram|^tg$/,"Telegram","send"],[/discord/,"Discord","chat"],[/whatsapp/,null,"chat"],
+  [/instagram/,"Instagram","star"],[/facebook|meta/,"Facebook","chat"],[/twitter|^x\.com/,"Twitter","chat"],[/tiktok/,"TikTok","music"],
+  [/netflix/,"Netflix","tv"],[/spotify/,"Spotify","music"],[/twitch/,"Twitch","video"],[/steam/,"Steam","game"],[/epic/,"Epic_Games","game"],
+  [/playstation|psn/,"PlayStation","game"],[/xbox/,"Xbox","game"],[/nintendo/,"Nintendo","game"],[/github/,"GitHub","code"],
+  [/gmail/,"Gmail","mail"],[/google/,"Google","globe"],[/icloud/,"iCloud","cloud"],[/apple/,"Apple","phone"],
+  [/onedrive/,"OneDrive","cloud"],[/microsoft|windows|bing/,"Microsoft","server"],[/openai|chatgpt/,"ChatGPT","ai"],[/copilot/,"Copilot","ai"],
+  [/anthropic|claude|gemini|perplexity|(^|[^a-z])ai([^a-z]|$)/,null,"ai"],[/cloudflare/,"Cloudflare","cloud"],[/speedtest|ookla/,"Speedtest","bolt"],
+  [/(^|[^a-z])(ads|adblock|reklama)([^a-z]|$)|advertising|category-ads|adguard/,"Advertising","ban"],[/paypal/,"PayPal","bank"],
+  [/amazon/,"Amazon","cart"],[/linkedin/,"Linkedin","chat"],[/notion/,"Notion","book"],[/torrent|tracker/,null,"download"],
+  [/whitelist|allow/,null,"shield"],[/block|reject|ban/,null,"ban"],[/russia|^ru$|(^|-)ru($|-)|росс/,"Russia","flagru"],
+];
+const TYPE_ICON = {"DOMAIN":"globe","DOMAIN-SUFFIX":"globe","DOMAIN-KEYWORD":"globe","DOMAIN-REGEX":"code","GEOSITE":"pin","GEOIP":"pin","IP-CIDR":"net","IP-CIDR6":"net","IP-ASN":"net","SRC-IP-CIDR":"net","DST-PORT":"port","SRC-PORT":"port","IN-PORT":"port","NETWORK":"net","PROCESS-NAME":"cpu","PROCESS-PATH":"cpu","RULE-SET":"list","AND":"logic","OR":"logic","NOT":"logic","MATCH":"asterisk"};
+const GTYPE_ICON = {"select":"pointer","url-test":"gauge","fallback":"stack","load-balance":"scale","relay":"link"};
+let icons = {};
+const failedImg = new Set();
+const saveIcons = () => lsSet("mihomo-icons-v1", icons);
+function hashColor(t){ let h=0; for(const c of String(t)) h=(h*31+c.codePointAt(0))>>>0; return `var(--c${h%6+1})`; }
+function letterTxt(t){ t=String(t).replace(/[^\p{L}\p{N}]/gu,""); return esc(t.length<=3 ? t.toUpperCase() : t[0].toUpperCase()); }
+const flagEmoji = cc => cc.toUpperCase().replace(/./g, c => String.fromCodePoint(127397 + c.charCodeAt(0)));
+function autoFor(text){ const t=String(text).toLowerCase(); for(const [re,q,sv] of AUTO) if(re.test(t)) return {q, s:sv}; return null; }
+function iconHTML(ref, opt={}){
+  ref = ref || {s:"globe"};
+  const url = ref.q ? qureUrl(ref.q) : (ref.u || null);
+  const fbS = ref.s || (ref.l ? null : "globe");
+  let inner, lt = false;
+  if(url && !failedImg.has(url)) inner = `<img src="${esc(url)}" alt="" loading="lazy" data-fb="${esc(JSON.stringify({s:fbS, l:ref.l||null}))}">`;
+  else if(ref.l && !ref.s){ inner = letterTxt(ref.l); lt = true; }
+  else if(ref.e) inner = `<span class="em">${ref.e}</span>`;
+  else inner = svgIcon(fbS);
+  const cls = `ic${lt?" lt":""}${opt.lg?" lg":""}`;
+  const st = ref.l ? ` style="--lc:${hashColor(ref.l)}"` : "";
+  if(opt.key) return `<button type="button" class="${cls}"${st} data-act="icon" data-key="${esc(opt.key)}" title="Сменить иконку" aria-label="Сменить иконку">${inner}</button>`;
+  return `<span class="${cls}"${st}>${inner}</span>`;
+}
+function ruleIcon(r){
+  const ov = icons["rule:"+r.type+","+r.value]; if(ov) return ov;
+  if(r.type==="RULE-SET" && icons["rp:"+r.value]) return icons["rp:"+r.value];
+  const v = r.value.toLowerCase();
+  if((r.type==="DOMAIN-SUFFIX" && /^(ru|su|рф|xn--p1ai)$/.test(v)) || (r.type==="GEOIP" && v==="ru") || (r.type==="GEOSITE" && /(^|[-!])ru$/.test(v))) return {s:"flagru"};
+  if(r.type==="GEOIP" && /^[a-z]{2}$/.test(v)) return {e:flagEmoji(v)};
+  if(r.type!=="MATCH"){ const a = autoFor(r.value); if(a) return a; }
+  if(r.type==="RULE-SET") return {l:r.value};
+  return {s:TYPE_ICON[r.type]||"globe"};
+}
+function groupIcon(g){
+  const d = g.data, typeS = GTYPE_ICON[d.type]||"server";
+  if(d.icon) return {u:d.icon, s:(icons["grp:"+d.name]?.s)||typeS};
+  if(icons["grp:"+d.name]) return icons["grp:"+d.name];
+  if(/^ru\b|russia|росс/i.test(d.name)) return {s:"flagru"};
+  return {s:typeS};
+}
+const rpIcon = r => icons["rp:"+r.name] || autoFor(r.name) || {l:r.name};
+const provIcon = p => icons["prov:"+p.name] || {l:p.name};
+
+let cfg = null, provs = [], groupsS = [], rprovs = [], rules = [];
+let srcName = "пример";
+let seq = 0;
+const ui = {tab:"subs", noyaml:false, search:"", tfilter:"", test:"", testIp:""};
+let nodesCache = {};
+const undoStack = [];
+
+const $ = s => document.querySelector(s);
+const uid = () => "i" + (++seq);
+const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c=='x'?r:(r&3|8)).toString(16)}));
+const first = v => Array.isArray(v) ? (v[0] ?? "") : (v ?? "");
+const esc = s => String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+const clone = x => x === undefined ? undefined : JSON.parse(JSON.stringify(x));
+const lsGet = (k, d) => { try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } };
+const lsSet = (k, v) => { try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} };
+
+/* ---------- parsing ---------- */
+function splitTop(s){
+  const out=[]; let d=0, cur="";
+  for(const ch of s){ if(ch==="(") d++; else if(ch===")") d--; if(ch===","&&d===0){ out.push(cur); cur=""; } else cur+=ch; }
+  out.push(cur); return out.map(x=>x.trim());
+}
+function parseRule(str){
+  const p = splitTop(String(str)); const type = (p[0]||"").toUpperCase();
+  if(type==="MATCH") return {id:uid(), type, value:"", target:p[1]||"", opts:p.slice(2)};
+  return {id:uid(), type, value:p[1]||"", target:p[2]||"", opts:p.slice(3)};
+}
+const ruleStr = r => (r.type==="MATCH" ? [r.type, r.target, ...r.opts] : [r.type, r.value, r.target, ...r.opts]).join(",");
+
+function goRe(s){
+  if(!s) return null;
+  let flags=""; if(s.includes("(?i)")){ flags="i"; s=s.split("(?i)").join(""); }
+  try{ return new RegExp(s, flags); }catch(e){ return undefined; }
+}
+function b64dec(s){
+  s=s.replace(/\s+/g,"").replace(/-/g,"+").replace(/_/g,"/"); while(s.length%4) s+="=";
+  const bin=atob(s); return new TextDecoder().decode(Uint8Array.from(bin, c=>c.charCodeAt(0)));
+}
+function parseUri(l){
+  const scheme = l.split("://")[0].toLowerCase();
+  if(scheme==="vmess"){
+    try{ const j=JSON.parse(b64dec(l.slice(8).split("#")[0])); return {name:j.ps||"(без имени)", type:"vmess", server:j.add||"", port:j.port||""}; }catch(e){}
+  }
+  const h = l.indexOf("#"); let name="";
+  if(h>=0){ try{ name=decodeURIComponent(l.slice(h+1)); }catch(e){ name=l.slice(h+1); } }
+  const m = (h>=0?l.slice(0,h):l).match(/@\[?([^\]@:/?#]+)\]?:(\d+)/);
+  return {name:name||"(без имени)", type:scheme==="hy2"?"hysteria2":scheme, server:m?.[1]||"", port:m?.[2]||""};
+}
+function parseNodes(text){
+  text = text.trim();
+  if(!text) throw new Error("Пусто");
+  if(/(^|\n)proxies\s*:/.test(text)){
+    const o = jsyaml.load(text);
+    return (o.proxies||[]).map(x=>({name:String(x.name??""), type:x.type||"", server:x.server||"", port:x.port||""}));
+  }
+  if(!text.includes("://")){
+    try{ text = b64dec(text); }catch(e){ throw new Error("Не похоже ни на base64, ни на список ссылок, ни на YAML с proxies"); }
+  }
+  const list = text.split(/\r?\n/).map(l=>l.trim()).filter(l=>/^[a-z0-9+.-]+:\/\//i.test(l)).map(parseUri);
+  if(!list.length) throw new Error("Узлы не найдены. Возможно, сервер вернул HTML-страницу вместо подписки.");
+  return list;
+}
+
+/* ---------- load / build ---------- */
+function load(text, name){
+  const obj = jsyaml.load(text);
+  if(!obj || typeof obj !== "object" || Array.isArray(obj)) throw new Error("Файл не похож на YAML-конфиг.");
+  cfg = obj; srcName = name;
+  groupsS = (obj["proxy-groups"]||[]).map(g => ({id:uid(), data:clone(g)}));
+  provs = Object.entries(obj["proxy-providers"]||{}).map(([n,p]) => {
+    const h = {...(p.header||{})}; const hdr = {};
+    for(const [k,hk] of HKEYS){ hdr[k] = String(first(h[hk])); delete h[hk]; }
+    const extra = {...p};
+    ["url","path","interval","exclude-filter","header"].forEach(k=>delete extra[k]);
+    return {
+      id:uid(), name:n, enabled:true, url:p.url||"", path:p.path||`./${n.toLowerCase()}.yaml`, interval:p.interval ?? 3600,
+      exclude:p["exclude-filter"]||"", hdr, extraHdr:h, extra,
+      groups:new Set(groupsS.filter(g=>Array.isArray(g.data.use)&&g.data.use.includes(n)).map(g=>g.data.name)),
+      nodes: nodesCache[p.url] || null, open:false, live:null,
+    };
+  });
+  rprovs = Object.entries(obj["rule-providers"]||{}).map(([n,d]) => ({id:uid(), name:n, data:clone(d)}));
+  rules = (obj.rules||[]).map(parseRule);
+  if(conn.live){ for(const p of provs){ const lp = conn.live.pp[p.name]; if(lp && Array.isArray(lp.proxies)){ p.nodes = lp.proxies.map(x=>({name:x.name, type:String(x.type||"").toLowerCase(), server:"", port:"", delay:lastDelay(x)})); p.live = {updatedAt:lp.updatedAt, sub:lp.subscriptionInfo}; } } }
+  render();
+}
+
+function insertBefore(obj, key, val, before){
+  if(key in obj || !(before in obj)){ obj[key]=val; return obj; }
+  const o={}; for(const k of Object.keys(obj)){ if(k===before) o[key]=val; o[k]=obj[k]; } return o;
+}
+
+function build(){
+  let out = clone(cfg);
+  const on = provs.filter(p => p.enabled && p.name.trim());
+  const pp = {};
+  for(const p of on){
+    const o = {type:p.extra.type||"http", url:p.url, path:p.path, interval:Number(p.interval)||3600};
+    for(const [k,v] of Object.entries(p.extra)) if(k!=="type") o[k]=v;
+    if(p.exclude) o["exclude-filter"] = p.exclude;
+    const header = {};
+    for(const [k,hk] of HKEYS) if(p.hdr[k]) header[hk] = [p.hdr[k]];
+    Object.assign(header, p.extraHdr);
+    if(Object.keys(header).length) o.header = header;
+    pp[p.name.trim()] = o;
+  }
+  if(Object.keys(pp).length || "proxy-providers" in out) out = insertBefore(out, "proxy-providers", pp, "proxy-groups");
+  out["proxy-groups"] = groupsS.map(g => {
+    const d = g.data; const o = {name:d.name, type:d.type};
+    for(const k of Object.keys(d)) if(k!=="name" && k!=="type") o[k] = clone(d[k]);
+    const use = on.filter(p => p.groups.has(d.name)).map(p => p.name.trim());
+    if(use.length) o.use = use; else delete o.use;
+    if(Array.isArray(o.proxies) && !o.proxies.length) delete o.proxies;
+    for(const k of ["filter","exclude-filter"]) if(o[k]==="") delete o[k];
+    return o;
+  });
+  if(rprovs.length) out = insertBefore(out, "rule-providers", Object.fromEntries(rprovs.map(r=>[r.name.trim(), r.data])), "rules");
+  else delete out["rule-providers"];
+  out.rules = rules.map(ruleStr);
+
+  let y = jsyaml.dump(out, {lineWidth:-1, noRefs:true, quotingType:'"'});
+  y = y.replace(/^(\s+)(User-Agent|x-[\w-]+):\n\1  - (.+)$(?!\n\1  - )/gm, (m,ind,k,v) => {
+    const val = /^["']/.test(v) ? jsyaml.load(v) : v;
+    return `${ind}${k}: [${JSON.stringify(String(val))}]`;
+  });
+  y = y.replace(/^(\s+)(proxies|use):\n((?:\1  - [^\n]*(?:\n|$))+)/gm, (m,ind,k,body) => {
+    const items = body.replace(/\n$/,"").split("\n").map(l=>l.replace(/^\s+- /,""));
+    const fl = items.map(v => /^["']/.test(v) || !/[,\[\]{}#&*!|>%@`]/.test(v) ? v : JSON.stringify(v));
+    return `${ind}${k}: [${fl.join(", ")}]` + (body.endsWith("\n") ? "\n" : "");
+  });
+  { const L = y.split("\n"), o = [];
+    L.forEach((l,i) => { if(i>0 && /^[A-Za-z]/.test(l) && (/:\s*$/.test(l) || /^\s/.test(L[i-1]))) o.push(""); o.push(l); });
+    y = o.join("\n"); }
+  for(const sec of ["proxy-providers","rule-providers"])
+    y = y.replace(new RegExp(`(^${sec}:\\n)([\\s\\S]*?)(?=\\n\\n\\S|(?![\\s\\S]))`,"m"), (m,h,b) => h + b.replace(/\n(?=  [^\s-][^\n]*:\n)/g,"\n\n"));
+  y = y.replace(/(^proxy-groups:\n)([\s\S]*?)(?=\n\n\S|(?![\s\S]))/m, (m,h,b) => h + b.replace(/\n(?=  - name: )/g,"\n\n"));
+  return y;
+}
+
+/* ---------- helpers ---------- */
+const groupNames = () => groupsS.map(g=>g.data.name);
+const proxyNames = () => (cfg?.proxies||[]).map(p=>p.name);
+const allTargets = () => [...BUILTIN, ...groupNames(), ...proxyNames()];
+function targetColor(t){
+  if(t==="DIRECT") return "var(--c-direct)";
+  if(t.startsWith("REJECT")) return "var(--c-reject)";
+  if(t==="PASS") return "var(--muted)";
+  const i = groupNames().indexOf(t);
+  return i<0 ? "var(--warn)" : `var(--c${i%6+1})`;
+}
+function providerNodes(p){
+  const er = goRe(p.exclude), fr = goRe(p.extra.filter);
+  return (p.nodes||[]).filter(n => !(er && er.test(n.name)) && !(fr && !fr.test(n.name)));
+}
+function nodeInGroup(n, d){
+  const fr = goRe(d.filter), er = goRe(d["exclude-filter"]);
+  return !(fr && !fr.test(n.name)) && !(er && er.test(n.name));
+}
+function groupNodes(g){
+  const d = g.data; let unknown = 0; const list = [];
+  for(const p of provs){
+    if(!p.enabled || !p.groups.has(d.name)) continue;
+    if(!p.nodes){ unknown++; continue; }
+    for(const n of providerNodes(p)) if(nodeInGroup(n,d)) list.push(n);
+  }
+  return {list, unknown};
+}
+const useCandidates = () => groupsS.filter(g => g.data.type!=="select" || provs.some(p=>p.groups.has(g.data.name)));
+
+function pushUndo(){
+  try{ undoStack.push(build()); if(undoStack.length>40) undoStack.shift(); }catch(e){}
+  $("#undoBtn").disabled = !undoStack.length;
+}
+$("#undoBtn").onclick = () => {
+  const y = undoStack.pop(); if(!y) return;
+  load(y, srcName); $("#undoBtn").disabled = !undoStack.length; flash("Отменено");
+};
+
+function problems(){
+  const out = [];
+  const targets = new Set(allTargets()), rpn = new Set(rprovs.map(r=>r.name));
+  const names = provs.filter(p=>p.enabled).map(p=>p.name.trim());
+  names.forEach((n,i)=>{ if(names.indexOf(n)!==i) out.push(`Две подписки с именем «${n}»`); });
+  provs.forEach(p=>{ if(p.enabled && !p.url) out.push(`У подписки «${p.name}» нет ссылки`);
+    if(p.enabled && !useCandidates().some(g=>p.groups.has(g.data.name))) out.push(`Подписка «${p.name}» не входит ни в одну группу`); });
+  for(const g of groupsS){
+    const d = g.data;
+    const hasUse = provs.some(p=>p.enabled && p.groups.has(d.name));
+    if(!(d.proxies||[]).length && !hasUse) out.push(`Группа «${d.name}» пустая`);
+    (d.proxies||[]).forEach(m=>{ if(!targets.has(m)) out.push(`В группе «${d.name}» нет такого участника: ${m}`); });
+    for(const k of ["filter","exclude-filter"]) if(goRe(d[k])===undefined) out.push(`Группа «${d.name}»: неверное регулярное выражение в ${k}`);
+  }
+  rprovs.forEach(r=>{ if(r.data.proxy && !targets.has(r.data.proxy)) out.push(`Список «${r.name}» качается через несуществующую группу ${r.data.proxy}`); });
+  rules.forEach((r,i)=>{ const s = ruleIssue(r); if(s) out.push(`Правило ${i+1}: ${s}`); });
+  const be = clientBlockEnd();
+  rules.forEach((r,i)=>{ if(r.type==="SRC-IP-CIDR" && i>be) out.push(`Клиент ${r.value}: выше стоят другие правила, они сработают раньше`); });
+  const mi = rules.findIndex(r=>r.type==="MATCH");
+  if(mi<0) out.push("Нет правила MATCH в конце");
+  else if(mi<rules.length-1) out.push(`После MATCH (правило ${mi+1}) ещё ${rules.length-1-mi} правил — они никогда не сработают`);
+  return out;
+}
+function ruleIssue(r){
+  if(!allTargets().includes(r.target)) return r.target ? `цели «${r.target}» нет` : "не выбрана цель";
+  if(r.type==="RULE-SET" && !rprovs.some(x=>x.name===r.value)) return `нет списка «${r.value}»`;
+  if(r.type!=="MATCH" && !r.value) return "пустое значение";
+  if((r.type==="SRC-IP-CIDR" || r.type==="IP-CIDR") && !validCidr(r.value)) return "неверный IP или подсеть";
+  return null;
+}
+
+/* ---------- render ---------- */
+function withFocus(fn){
+  const a = document.activeElement, id = a && a.id;
+  let ss = null; try{ if(a && "selectionStart" in a) ss = [a.selectionStart, a.selectionEnd]; }catch(e){}
+  fn();
+  if(id){ const el = document.getElementById(id);
+    if(el && el!==document.activeElement){ el.focus({preventScroll:true}); try{ if(ss && el.setSelectionRange) el.setSelectionRange(ss[0], ss[1]); }catch(e){} } }
+}
+const mq = matchMedia("(max-width: 720px)");
+const isMobile = () => mq.matches;
+const MNAV = [["subs","Подписки","link"],["rules","Правила","list"],["clients","Клиенты","phone"],["groups","Группы","stack"],["router","Роутер","wifi"],["yaml","YAML","code"]];
+function renderNav(){
+  $("#mnav").innerHTML = MNAV.map(([k,l,ic]) => `<button data-tab="${k}" aria-selected="${ui.tab===k}" aria-label="${l}">${svgIcon(ic)}<span>${l}</span><span class="b" id="mb-${k}" hidden></span></button>`).join("");
+}
+function render(){
+  if(ui.tab==="yaml" && !isMobile()) ui.tab = "subs";
+  document.body.classList.toggle("m-yaml", ui.tab==="yaml");
+  document.querySelectorAll("#mnav [data-tab]").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tab===ui.tab)));
+  withFocus(() => {
+    document.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-selected", String(t.dataset.tab===ui.tab)));
+    $("#grid").classList.toggle("noyaml", ui.noyaml);
+    $("#yamlToggle").textContent = ui.noyaml ? "Показать YAML" : "Скрыть YAML";
+    if(ui.tab==="yaml") return;
+    if(ui.tab==="rules") renderRules(); else if(ui.tab==="groups") renderGroups(); else if(ui.tab==="clients") renderClients(); else if(ui.tab==="router") renderRouter(); else renderSubs();
+  });
+  refresh();
+}
+
+function refresh(){
+  let y = "";
+  try{ y = build(); $("#yaml").textContent = y; if(srcName!=="пример" && !HOST) lsSet(STORE, {text:y, name:srcName}); }
+  catch(e){ $("#yaml").textContent = "# Ошибка: " + e.message; }
+  const pr = problems();
+  $("#problems").hidden = !pr.length;
+  $("#problems").innerHTML = pr.length ? `<b>Проверьте (${pr.length}):</b><ul>${pr.slice(0,40).map(s=>`<li>${esc(s)}</li>`).join("")}</ul>` : "";
+  $("#meta").textContent = `${y.split("\n").length} строк`;
+  $("#srcname").textContent = srcName;
+  $("#cnt-subs").textContent = `${provs.filter(p=>p.enabled).length}/${provs.length}`;
+  $("#cnt-rules").textContent = rules.length;
+  $("#cnt-groups").textContent = groupsS.length;
+  $("#cnt-router").innerHTML = conn.ok ? '<span class="ok">●</span>' : "";
+  const mbY = $("#mb-yaml"), mbR = $("#mb-router");
+  if(mbY){ mbY.hidden = !pr.length; mbY.textContent = pr.length; }
+  if(mbR){ mbR.hidden = !conn.ok; mbR.className = "b ok"; mbR.textContent = ""; }
+  $("#applyBtn").hidden = HOST ? !HOST.canWrite : !conn.ok;
+  if(HOST){ $("#applyBtn").textContent = "Сохранить на роутер"; renderHostBar(); }
+  $("#cnt-clients").textContent = rules.filter(r=>r.type==="SRC-IP-CIDR").length || "";
+}
+
+function presetOptions(sel){
+  return `<option value="">— пресет —</option>` + Object.entries(PRESETS).map(([k,v])=>`<option value="${k}"${k===sel?" selected":""}>${esc(v.label)}</option>`).join("");
+}
+function applyPreset(p, key){
+  const pr = PRESETS[key]; if(!pr) return;
+  for(const [k] of HKEYS){
+    if(k==="hwid") p.hdr.hwid = pr.hwid==="@uuid" ? (/^[0-9a-f-]{36}$/i.test(p.hdr.hwid)?p.hdr.hwid:uuid()) : pr.hwid;
+    else p.hdr[k] = pr[k];
+  }
+}
+
+/* ===== Subscriptions tab ===== */
+function nodesBlock(p){
+  const cand = useCandidates().filter(g=>p.groups.has(g.data.name));
+  let body = "";
+  if(p.nodes){
+    const er = goRe(p.exclude), fr = goRe(p.extra.filter);
+    const rows = p.nodes.map(n => {
+      const ex = (er && er.test(n.name)) || (fr && !fr.test(n.name));
+      const tags = ex ? `<span class="tag x">исключён</span>` : cand.filter(g=>nodeInGroup(n,g.data)).map(g=>`<span class="tag">${esc(g.data.name)}</span>`).join("") || `<span class="tag x">ни в одной группе</span>`;
+      return `<div class="node${ex?" ex":""}"><div class="nn">${esc(n.name)}</div><div class="proto">${esc(n.type)}</div><div class="srv">${n.server?esc(n.server)+(n.port?":"+esc(n.port):""):delayHTML(n.delay)}</div><div class="tags">${tags}</div></div>`;
+    }).join("");
+    const kept = providerNodes(p);
+    const per = cand.map(g=>`${esc(g.data.name)}: <b>${kept.filter(n=>nodeInGroup(n,g.data)).length}</b>`).join(" · ");
+    body = `<div class="nodesum"><span><b>${p.nodes.length}</b> узлов</span><span>исключено: <b>${p.nodes.length-kept.length}</b></span><span>${per}</span></div><div class="nodelist">${rows}</div>`;
+  } else if(p.open){
+    body = `<div class="note">Чтобы увидеть узлы, нажмите «Загрузить». Если браузер не пустит запрос (CORS), скопируйте curl, выполните его и вставьте ответ через «Вставить ответ подписки». Подходит base64, список ссылок vless:// и YAML с proxies.</div>`;
+  }
+  return `<div class="nodes">
+    <div class="bar"><span class="lbl">Узлы</span>
+      ${p.nodes||p.open ? "" : `<button class="sm" data-act="nopen">Показать</button>`}
+      ${conn.ok && !p.nodes ? `<button class="sm" data-act="plive">С роутера</button>` : ""}
+      ${p.nodes||p.open ? `<button class="sm" data-act="fetch">Загрузить</button><button class="sm" data-act="pastenodes">Вставить ответ подписки</button><button class="sm" data-act="curl">Копировать curl</button>${p.url?`<a class="btn sm" href="${esc(p.url)}" target="_blank" rel="noopener">Открыть ссылку</a>`:""}` : ""}
+      ${p.nodes ? `<button class="sm ghost" data-act="nclear">Скрыть</button>` : ""}
+    </div>${conn.ok ? `<div class="live">${p.live ? `<span>На роутере: обновлено ${ago(p.live.updatedAt)}</span>${p.live.sub?`<span><b>${esc(subInfo(p.live.sub))}</b></span>`:""}` : `<span>На роутере этой подписки нет — примените конфиг</span>`}
+      ${p.live ? `<button class="sm" data-act="pupd">Обновить на роутере</button><button class="sm" data-act="pping">Пинг узлов</button>` : ""}</div>` : ""}${body}</div>`;
+}
+function renderSubs(){
+  const cands = useCandidates();
+  $("#main").innerHTML = `
+    <div class="panel bulk">
+      <div class="lbl">Устройство для всех подписок</div>
+      <label class="f" style="flex:1 1 180px"><span>Пресет</span><select id="bulkPreset">${presetOptions("")}</select></label>
+      <label class="f" style="flex:0 1 120px"><span>x-ver-os</span><input type="text" id="bulkVer" class="mono" placeholder="без изменений"></label>
+      <button id="bulkApply" class="primary">Применить ко всем</button>
+      <button id="addProv">+ Подписка</button>
+    </div>
+    <div id="provList" class="col">` + (provs.map(p => `
+    <section class="prov${p.enabled?"":" off"}" data-id="${p.id}">
+      <div class="phead">
+        ${iconHTML(provIcon(p), {key:"prov:"+p.name, lg:true})}
+        <input type="text" class="name" id="n-${p.id}" data-k="name" value="${esc(p.name)}" aria-label="Имя подписки">
+        <label class="switch"><input type="checkbox" data-k="enabled" id="en-${p.id}"${p.enabled?" checked":""}> включена</label>
+        <button class="ghost sm" data-act="up" aria-label="Выше">↑</button>
+        <button class="ghost sm" data-act="down" aria-label="Ниже">↓</button>
+        <button class="ghost danger sm" data-act="del">Удалить</button>
+      </div>
+      <div class="body">
+        <label class="f"><span>URL подписки</span><input type="text" class="mono" id="u-${p.id}" data-k="url" value="${esc(p.url)}" placeholder="https://…" spellcheck="false"></label>
+        <div class="row">
+          <label class="f"><span>path</span><input type="text" class="mono" id="p-${p.id}" data-k="path" value="${esc(p.path)}"></label>
+          <label class="f"><span>interval, с</span><input type="number" id="i-${p.id}" data-k="interval" value="${esc(p.interval)}"></label>
+          <label class="f"><span>exclude-filter</span><input type="text" class="mono" id="x-${p.id}" data-k="exclude" value="${esc(p.exclude)}" placeholder="нет"></label>
+        </div>
+        <div class="row3">
+          <label class="f"><span>Пресет устройства</span><select data-act="preset" id="pr-${p.id}">${presetOptions("")}</select></label>
+          <label class="f"><span>User-Agent</span><input type="text" class="mono" id="ua-${p.id}" data-h="ua" value="${esc(p.hdr.ua)}"></label>
+          <label class="f"><span>x-device-os</span><input type="text" class="mono" id="os-${p.id}" data-h="os" value="${esc(p.hdr.os)}"></label>
+          <label class="f"><span>x-ver-os</span><input type="text" class="mono" id="ver-${p.id}" data-h="ver" value="${esc(p.hdr.ver)}"></label>
+          <label class="f"><span>x-device-model</span><input type="text" class="mono" id="m-${p.id}" data-h="model" value="${esc(p.hdr.model)}"></label>
+          <label class="f"><span>x-hwid</span><div class="inline"><input type="text" class="mono" id="h-${p.id}" data-h="hwid" value="${esc(p.hdr.hwid)}"><button class="sm" data-act="hwid" title="Сгенерировать новый UUID">UUID</button></div></label>
+        </div>
+        ${cands.length ? `<div class="chips"><span class="t">Группы</span>${cands.map(g=>{const n=g.data.name;const on=p.groups.has(n);return `<button class="chip${on?" on":""}" data-act="grp" data-g="${esc(n)}" aria-pressed="${on}">${esc(n)}</button>`;}).join("")}</div>` : ""}
+        ${nodesBlock(p)}
+      </div>
+    </section>`).join("") || `<div class="note">Подписок нет. Нажмите <b>+ Подписка</b>.</div>`) + `</div>`;
+}
+
+const byProv = el => provs.find(p => p.id === el.closest(".prov")?.dataset.id);
+
+function addProv(){
+  pushUndo();
+  const n = "NewSub" + (provs.length+1), tpl = provs[0];
+  const p = {
+    id:uid(), name:n, enabled:true, url:"", path:`./${n.toLowerCase()}.yaml`, interval:3600, exclude:"",
+    hdr:{ua:"",hwid:"",os:"",ver:"",model:""}, extraHdr:{},
+    extra: tpl ? clone(tpl.extra) : {type:"http", lazy:true,
+      "health-check":{enable:true,url:"http://gstatic.com/generate_204",interval:180,timeout:3000,"expected-status":204},
+      override:{"skip-cert-verify":true}},
+    groups:new Set(groupsS.filter(g=>Array.isArray(g.data.use) || provs.some(x=>x.groups.has(g.data.name))).map(g=>g.data.name)),
+    nodes:null, open:false,
+  };
+  applyPreset(p, "router");
+  provs.push(p); render();
+  setTimeout(()=>document.getElementById("u-"+p.id)?.focus(),0);
+}
+function curlCmd(p){
+  const q = s => `'${String(s).replace(/'/g,"'\\''")}'`;
+  const h = HKEYS.filter(([k])=>p.hdr[k]).map(([k,hk])=>`-H ${q(hk+": "+p.hdr[k])}`);
+  return `curl -sk ${h.join(" ")} ${q(p.url)}`;
+}
+async function copyText(t, okMsg){
+  try{ await navigator.clipboard.writeText(t); flash(okMsg||"Скопировано"); }
+  catch(e){ flash("Буфер недоступен. Команда: " + t.slice(0,80) + "…", true); }
+}
+function saveNodes(){ lsSet(STORE_NODES, nodesCache); }
+
+/* ===== Rules tab ===== */
+function renderRules(){
+  const counts = {}; rules.forEach(r=>counts[r.target]=(counts[r.target]||0)+1);
+  const legend = Object.keys(counts).map(t=>`<button class="chip${ui.tfilter===t?" on":""}" data-act="tf" data-t="${esc(t)}">${(()=>{const g=groupsS.find(x=>x.data.name===t);return g?`<span style="display:contents;--tc:${targetColor(t)}">${iconHTML(groupIcon(g))}</span>`:`<span class="dot" style="background:${targetColor(t)}"></span>`;})()}${esc(t)} <span class="muted">${counts[t]}</span></button>`).join("");
+  $("#main").innerHTML = `
+    <div class="panel tester">
+      <div class="row" style="grid-template-columns:minmax(0,2fr) minmax(0,1fr)">
+        <label class="f"><span>Куда пойдёт домен</span><input type="text" class="mono" id="testIn" value="${esc(ui.test)}" placeholder="например youtube.com, gosuslugi.ru, сайт.рф" spellcheck="false"></label>
+        <label class="f"><span>С устройства (IP)</span><input type="text" class="mono" id="testIp" value="${esc(ui.testIp)}" placeholder="любое" spellcheck="false"></label>
+      </div>
+      <div class="tout" id="testOut"></div>
+    </div>
+    <div class="rtools">
+      <button id="addRule" class="primary">+ Правило</button>
+      <button id="bulkRules">Вставить строками</button>
+      <input type="search" id="rsearch" value="${esc(ui.search)}" placeholder="Поиск по правилам" aria-label="Поиск по правилам">
+    </div>
+    <div class="legend">${legend}</div>
+    <div class="note small">Правила проверяются сверху вниз, срабатывает первое совпадение. Тащите плитку за <b>⋮⋮</b> или стрелками ↑↓ на ручке.</div>
+    <div id="rulesList" class="rules"></div>
+    <div class="bar" style="justify-content:space-between"><h2>Списки правил · rule-providers</h2><button id="addRP">+ Список</button></div>
+    <div class="rpgrid" id="rpGrid"></div>`;
+  renderRuleList(); renderRP(); renderTest();
+}
+function renderRuleList(){
+  const el = $("#rulesList"); if(!el) return;
+  const q = ui.search.trim().toLowerCase(), tf = ui.tfilter;
+  const filtered = !!(q || tf);
+  const mi = rules.findIndex(r=>r.type==="MATCH");
+  const tgts = allTargets(), rpn = rprovs.map(r=>r.name);
+  el.innerHTML = rules.map((r,i) => {
+    if(tf && r.target!==tf) return "";
+    if(q && !ruleStr(r).toLowerCase().includes(q)) return "";
+    const issue = ruleIssue(r), dead = mi>=0 && i>mi;
+    const types = (RULE_TYPES.includes(r.type)?RULE_TYPES:[r.type,...RULE_TYPES]).map(t=>`<option${t===r.type?" selected":""}>${esc(t)}</option>`).join("");
+    let val;
+    if(r.type==="MATCH") val = `<span class="rval muted">всё остальное</span>`;
+    else if(r.type==="RULE-SET") val = `<select class="rval mono" data-r="value" id="rv-${r.id}">${(rpn.includes(r.value)?rpn:[r.value,...rpn]).map(n=>`<option${n===r.value?" selected":""}>${esc(n)}</option>`).join("")}</select>`;
+    else val = `<input type="text" class="rval mono" data-r="value" id="rv-${r.id}" value="${esc(r.value)}" placeholder="${esc(HINTS[r.type]||"")}" spellcheck="false">`;
+    const tl = tgts.includes(r.target) ? tgts : [r.target, ...tgts];
+    const nr = NO_RESOLVE.has(r.type) ? `<label class="switch small" title="Не резолвить домен в IP для этого правила"><input type="checkbox" data-r="nr" id="nr-${r.id}"${r.opts.includes("no-resolve")?" checked":""}>no-resolve</label>` : "";
+    return `<div class="rule${issue?" bad":""}${dead?" dead":""}" data-id="${r.id}" style="--tc:${targetColor(r.target)}">
+      ${filtered ? `<span class="handle off" title="Сбросьте фильтр, чтобы перетаскивать">⋮⋮</span>` : `<button class="handle" id="rh-${r.id}" aria-label="Переместить правило ${i+1} (стрелки вверх/вниз)" title="Перетащить">⋮⋮</button>`}
+      <span class="idx">${i+1}</span>
+      ${iconHTML(ruleIcon(r), {key:"rule:"+r.type+","+r.value})}
+      <select class="rtype mono" data-r="type" id="rt-${r.id}" aria-label="Тип">${types}</select>
+      ${val}
+      <span class="arrow">→</span>
+      <select class="rtarget" data-r="target" id="rg-${r.id}" aria-label="Куда">${tl.map(t=>`<option${t===r.target?" selected":""}>${esc(t)}</option>`).join("")}</select>
+      ${nr}
+      <button class="ghost x" data-act="rdel" aria-label="Удалить правило ${i+1}">×</button>
+      ${issue||dead ? `<div class="issue">${esc(issue || "стоит после MATCH и никогда не сработает")}</div>` : ""}
+    </div>`;
+  }).join("") || `<div class="note">Ничего не найдено.</div>`;
+}
+function renderRP(){
+  const el = $("#rpGrid"); if(!el) return;
+  const tg = ["DIRECT", ...groupNames()];
+  el.innerHTML = rprovs.map(r => {
+    const d = r.data, used = rules.filter(x=>x.type==="RULE-SET"&&x.value===r.name).length;
+    const sel = (k, opts) => { const v = d[k]??""; const l = opts.includes(v)||v===""?opts:[v,...opts]; return `<select data-rp="${k}" id="rp${k}-${r.id}">${(k==="format"?[""]:[]).concat(l).map(o=>`<option value="${esc(o)}"${o===v?" selected":""}>${esc(o||"по умолчанию")}</option>`).join("")}</select>`; };
+    return `<section class="prov" data-rp="${r.id}">
+      <div class="phead">${iconHTML(rpIcon(r), {key:"rp:"+r.name, lg:true})}<input type="text" class="name mono" data-rp="name" id="rpn-${r.id}" value="${esc(r.name)}" aria-label="Имя списка"><span class="small ${used?"muted":"err"}">${used?`в ${used} прав.`:"не используется"}</span>${(()=>{ const lr = conn.live?.rp?.[r.name]; return lr ? `<span class="small muted">· на роутере ${lr.ruleCount??"?"} записей, ${ago(lr.updatedAt)}</span><button class="sm" data-act="rpupd">Обновить</button>` : ""; })()}
+        <button class="sm" data-act="rpuse" title="Добавить правило с этим списком">+ правило</button><button class="ghost danger sm" data-act="rpdel">Удалить</button></div>
+      <label class="f"><span>URL</span><input type="text" class="mono" data-rp="url" id="rpu-${r.id}" value="${esc(d.url||"")}" spellcheck="false"></label>
+      <div class="row">
+        <label class="f"><span>behavior</span>${sel("behavior",["domain","ipcidr","classical"])}</label>
+        <label class="f"><span>format</span>${sel("format",["yaml","text","mrs"])}</label>
+        <label class="f"><span>Качать через</span>${sel("proxy",tg)}</label>
+      </div>
+      <div class="row">
+        <label class="f"><span>path</span><input type="text" class="mono" data-rp="path" id="rpp-${r.id}" value="${esc(d.path||"")}"></label>
+        <label class="f"><span>interval, с</span><input type="number" data-rp="interval" id="rpi-${r.id}" value="${esc(d.interval??"")}"></label>
+      </div>
+    </section>`;
+  }).join("") || `<div class="note">Списков нет.</div>`;
+}
+
+function describe(name, depth, seen){
+  if(BUILTIN.includes(name)) return `<b>${esc(name)}</b>` + (name==="DIRECT" ? " <span class=\"muted\">— напрямую, без VPN</span>" : name.startsWith("REJECT") ? " <span class=\"muted\">— заблокировано</span>" : "");
+  const g = groupsS.find(x=>x.data.name===name);
+  if(!g) return proxyNames().includes(name) ? `<b>${esc(name)}</b> <span class="badge">узел</span>` : `<b class="err">${esc(name)}</b> — не найдено`;
+  if(seen.has(name) || depth>4) return `<b>${esc(name)}</b> …`;
+  seen = new Set(seen); seen.add(name);
+  const d = g.data, parts = [];
+  const px = d.proxies||[];
+  if(px.length){
+    if(d.type==="select") parts.push(`по умолчанию: ${describe(px[0], depth+1, seen)}${px.length>1?` <span class="muted">(можно переключить на ${px.slice(1).map(esc).join(", ")})</span>`:""}`);
+    else if(d.type==="fallback") parts.push(`сначала ${describe(px[0], depth+1, seen)}${px.length>1?` <span class="muted">→ если не отвечает: ${px.slice(1).map(esc).join(" → ")}</span>`:""}`);
+    else parts.push(`из: ${px.map(esc).join(", ")}`);
+  }
+  const use = provs.filter(p=>p.enabled && p.groups.has(name)).map(p=>p.name);
+  if(use.length){
+    const gn = groupNodes(g);
+    parts.push(`узлы подписок ${use.map(esc).join(", ")}` + (d.filter?` · только <code>${esc(d.filter)}</code>`:"") + (d["exclude-filter"]?` · кроме <code>${esc(d["exclude-filter"])}</code>`:"") + (gn.list.length ? ` · <b>${gn.list.length}</b> узл.` : ""));
+  }
+  return `<b>${esc(name)}</b> <span class="badge">${esc(GTYPE_RU[d.type]||d.type)}</span>` + (parts.length ? `<ul>${parts.map(p=>`<li>${p}</li>`).join("")}</ul>` : "");
+}
+function renderTest(){
+  const out = $("#testOut"); if(!out) return;
+  let d = ui.test.trim().toLowerCase().replace(/^[a-z]+:\/\//,"").replace(/[\/?#:].*$/,"");
+  const ip = ui.testIp;
+  if(!d && !ip){ out.innerHTML = ""; return; }
+  const maybe = []; let hit = null, hitIdx = -1;
+  for(let i=0;i<rules.length;i++){
+    const r = rules[i];
+    const m = evalRule(r.type, r.value, r.opts, d, ip);
+    if(m===true){ hit = r; hitIdx = i; break; }
+    if(m==="?") maybe.push([r,i]);
+  }
+  const why = r => { const cm = r.type==="AND" && r.value.match(CLIENT_RE); if(cm) return `если домен есть в списке <code>${esc(cm[2])}</code>`;
+    return r.type==="RULE-SET" ? `если домен есть в списке <code>${esc(r.value)}</code>` : r.type==="GEOSITE" ? `если домен в geosite <code>${esc(r.value)}</code>` : r.type.startsWith("IP")||r.type==="GEOIP" ? `если IP сервера попадает в <code>${esc(r.value)}</code>` : `если сработает <code>${esc(ruleStr(r))}</code>`; };
+  out.innerHTML = `<ol>` +
+    maybe.slice(0,8).map(([r,i])=>`<li class="maybe" value="${i+1}">${why(r)} → ${esc(r.target)}</li>`).join("") +
+    (maybe.length>8 ? `<li class="maybe">…ещё ${maybe.length-8} списков</li>` : "") +
+    (hit ? `<li class="hit" value="${hitIdx+1}">${maybe.length?"иначе ":""}<code>${esc(ruleStr(hit))}</code> → ${describe(hit.target, 0, new Set())}</li>` : `<li class="hit">ни одно правило не совпало</li>`) +
+    `</ol>` + (maybe.length ? `<div class="small muted">Содержимое списков страница не загружает, поэтому они показаны как условия.</div>` : "");
+}
+function moveRule(id, delta){
+  const i = rules.findIndex(r=>r.id===id), j = i+delta;
+  if(i<0 || j<0 || j>=rules.length) return;
+  pushUndo(); [rules[i], rules[j]] = [rules[j], rules[i]];
+  withFocus(renderRuleList); refresh();
+}
+function addRule(r, focus=true){
+  const last = rules[rules.length-1];
+  const at = last && last.type==="MATCH" ? rules.length-1 : rules.length;
+  rules.splice(at, 0, r);
+  ui.search = ""; ui.tfilter = "";
+  render();
+  if(focus) setTimeout(()=>{ const el = document.getElementById("rv-"+r.id) || document.getElementById("rt-"+r.id); el?.focus(); el?.scrollIntoView({block:"center"}); },0);
+}
+
+/* ===== evaluation helpers ===== */
+function ip4(s){ const m = String(s).trim().match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/); return m && m.slice(1).every(x=>+x<=255) ? ((+m[1]*16777216) + (+m[2]<<16) + (+m[3]<<8) + (+m[4])) : null; }
+function validCidr(c){
+  const [a, b] = String(c).split("/");
+  if(ip4(a)!==null) return b===undefined || (/^\d{1,2}$/.test(b) && +b<=32);
+  return /^[0-9a-f:]+$/i.test(a) && a.includes(":") && (b===undefined || (/^\d{1,3}$/.test(b) && +b<=128));
+}
+function ipInCidr(ip, c){
+  const [a, bits] = String(c).split("/"); const x = ip4(ip), y = ip4(a);
+  if(x===null || y===null) return String(ip).trim().toLowerCase()===a.toLowerCase();
+  const b = bits===undefined ? 32 : +bits; if(b===0) return true;
+  const mask = (0xFFFFFFFF << (32-b)) >>> 0;
+  return ((x & mask)>>>0) === ((y & mask)>>>0);
+}
+function evalRule(type, value, opts, d, ip){
+  const v = String(value).toLowerCase();
+  switch(type){
+    case "DOMAIN": return !!d && d===v;
+    case "DOMAIN-SUFFIX": return !!d && (d===v || d.endsWith("."+v));
+    case "DOMAIN-KEYWORD": return !!d && !!v && d.includes(v);
+    case "DOMAIN-REGEX": try{ return !!d && new RegExp(value).test(d); }catch(e){ return false; }
+    case "SRC-IP-CIDR": return !!ip && ipInCidr(ip, value);
+    case "MATCH": return true;
+    case "RULE-SET": case "GEOSITE": return d ? "?" : "?";
+    case "GEOIP": case "IP-CIDR": case "IP-CIDR6": case "IP-ASN": return (opts||[]).includes("no-resolve") ? false : "?";
+    case "AND": case "OR": case "NOT": {
+      const inner = splitTop(String(value).replace(/^\(/,"").replace(/\)$/,"")).map(x => { const q = splitTop(x.replace(/^\(/,"").replace(/\)$/,"")); return evalRule((q[0]||"").toUpperCase(), q[1]||"", q.slice(2), d, ip); });
+      if(type==="AND") return inner.some(x=>x===false) ? false : inner.every(x=>x===true) ? true : "?";
+      if(type==="OR") return inner.some(x=>x===true) ? true : inner.every(x=>x===false) ? false : "?";
+      return inner[0]===true ? false : inner[0]===false ? true : "?";
+    }
+    default: return false;
+  }
+}
+
+/* ===== Host integration (LuCI / nikki-fleet panel) ===== */
+// A host page (LuCI view or the panel) embeds this file in an iframe and
+// exposes window.NF_HOST with: kind, title, canWrite, listProfiles(),
+// readProfile(kind,name), writeProfile(kind,name,content,opts), api(method,path,body).
+const HOST = (() => { try { return window.NF_HOST || (window.parent !== window && window.parent.NF_HOST) || null; } catch(e){ return null; } })();
+const host = {cur:null, profiles:[], baseline:"", busy:false, last:null};
+const HOST_LABEL = HOST ? (HOST.kind==="luci" ? "LuCI · Nikki" : "Панель nikki-fleet") : "";
+function mihomoErrors(out){
+  const lines = String(out||"").split("\n").map(l => { const m = l.match(/level=(?:error|fatal) msg="(.*)"$/); return m ? m[1].replace(/\\"/g,'"') : null; }).filter(Boolean);
+  return lines.length ? lines.join("\n") : String(out||"").split("\n").slice(-6).join("\n");
+}
+function hostResultText(r){
+  if(!r) return "";
+  if(r.ok) return r.reloaded ? "Сохранено и применено: Nikki перезапущен, mihomo работает" : (r.stage==="written" ? "Сохранено. Профиль не активен — перезапуск не нужен" : "Сохранено");
+  if(r.stage==="test") return "mihomo не принял конфиг, на роутере ничего не изменилось:\n" + mihomoErrors(r.output);
+  if(r.rolled_back) return "mihomo не запустился с новым конфигом — вернул предыдущую версию" + (r.recovered===false ? " (внимание: mihomo не отвечает и после отката)" : "") + (r.log ? "\n" + mihomoErrors(r.log) : "");
+  return r.error || "Ошибка";
+}
+function renderHostBar(){
+  const el = $("#hostbar"); if(!HOST || !el) return;
+  el.hidden = false;
+  const cur = host.cur;
+  const dirty = cur && host.baseline && $("#yaml").textContent !== host.baseline;
+  const opts = host.profiles.map(p => `<option value="${esc(p.kind+":"+p.name)}"${cur && cur.kind===p.kind && cur.name===p.name ? " selected" : ""}>${p.active?"● ":""}${esc(p.kind==="subscription" ? "Подписка: "+p.label : p.name)}</option>`).join("");
+  el.innerHTML = `<span class="src">${esc(HOST_LABEL)}${HOST.title ? " · " + esc(HOST.title) : ""}</span>
+    <select id="hostProfile" aria-label="Профиль на роутере">${opts}<option value="__new">+ Сохранить как новый профиль…</option></select>
+    <span class="${dirty?"dirty":"clean"}">${cur ? (dirty ? "● есть несохранённые изменения" : "сохранено на роутере") : ""}</span>
+    <span class="grow"></span>
+    <button id="hostReload" class="sm">Перечитать с роутера</button>
+    ${HOST.canWrite ? `<button id="hostSave" class="primary"${host.busy?" disabled":""}>${host.busy ? "Сохраняю…" : "Сохранить на роутер"}</button>` : `<span class="small muted">только просмотр</span>`}
+    ${cur && cur.kind==="subscription" ? `<div class="small" style="width:100%;color:var(--warn)">Это профиль из подписки Nikki: при её обновлении правки пропадут. Сохраните его как новый профиль — он станет активным.</div>` : ""}
+    ${host.last ? `<div class="hostres" style="width:100%;color:${host.last.ok?"var(--ok)":"var(--warn)"}">${esc(hostResultText(host.last))}</div>` : ""}`;
+}
+async function hostLoad(kind, name){
+  const text = await HOST.readProfile(kind, name);
+  host.cur = {kind, name};
+  load(text, kind==="subscription" ? "подписка " + name : name);
+  host.baseline = $("#yaml").textContent;
+  $("#fname").value = kind==="subscription" ? name + ".yaml" : name;
+  $("#hint").hidden = true;
+  renderHostBar();
+}
+async function hostInit(){
+  try{
+    const r = await HOST.listProfiles();
+    host.profiles = r.profiles || [];
+    const act = r.active && r.active.kind ? r.active : (host.profiles[0] || null);
+    if(act){ await hostLoad(act.kind, act.name); }
+    else { load(SAMPLE, "пример"); renderHostBar(); flash("На роутере нет профилей — начните с примера и сохраните как новый профиль"); }
+    connect(true);
+  }catch(e){ flash("Не удалось загрузить профиль с роутера: " + (e.message||e), true); load(SAMPLE, "пример"); renderHostBar(); }
+}
+async function hostSave(asNew){
+  if(!HOST || !HOST.canWrite || host.busy) return;
+  let kind = host.cur?.kind || "file", name = host.cur?.name, activate = false;
+  if(asNew || kind==="subscription" || !name){
+    let n = (asNew || "").trim();
+    if(!n){ openDlg("newprofile"); return; }
+    if(!/\.ya?ml$/i.test(n)) n += ".yaml";
+    if(!/^[A-Za-z0-9_.@-]+\.ya?ml$/.test(n)){ flash("Имя файла: латиница, цифры, _ . @ -", true); return; }
+    kind = "file"; name = n; activate = true;
+  }
+  const pr = problems();
+  const btn = $("#hostSave");
+  if(pr.length && btn && !btn.dataset.armed && !asNew){
+    btn.dataset.armed = "1"; btn.textContent = `Есть ${pr.length} предупр. — сохранить?`;
+    setTimeout(()=>{ if(btn.isConnected){ delete btn.dataset.armed; renderHostBar(); } }, 4000); return;
+  }
+  host.busy = true; host.last = null; renderHostBar();
+  const y = $("#yaml").textContent;
+  try{
+    const r = await HOST.writeProfile(kind, name, y, {activate, reload:true});
+    host.last = r;
+    if(r && r.ok){
+      host.cur = {kind, name}; host.baseline = y;
+      const l = await HOST.listProfiles().catch(()=>null); if(l) host.profiles = l.profiles || host.profiles;
+      flash(r.reloaded ? "Сохранено на роутере и применено" : "Сохранено на роутере");
+      setTimeout(()=>refreshLive(false).catch(()=>{}), 1500);
+    } else flash(hostResultText(r).split("\n")[0], true);
+  }catch(e){ host.last = {ok:false, error:e.message||String(e)}; flash(host.last.error, true); }
+  host.busy = false; renderHostBar();
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("button"); if(!b) return;
+  if(b.id==="hostSave") hostSave();
+  if(b.id==="hostReload" && host.cur){ pushUndo(); hostLoad(host.cur.kind, host.cur.name).then(()=>flash("Профиль перечитан с роутера")).catch(err=>flash(err.message, true)); }
+});
+document.addEventListener("change", e => {
+  if(e.target.id!=="hostProfile") return;
+  const v = e.target.value;
+  if(v==="__new"){ e.target.value = host.cur ? host.cur.kind+":"+host.cur.name : ""; openDlg("newprofile"); return; }
+  const i = v.indexOf(":");
+  pushUndo(); hostLoad(v.slice(0,i), v.slice(i+1)).catch(err=>flash(err.message, true));
+});
+
+/* ===== Router (mihomo API) ===== */
+const conn = {url:"", secret:"", path:"/etc/mihomo/config.yaml", svc:"mihomo", ok:false, version:"", err:"", live:null, lastApply:null};
+const saveConn = () => lsSet("mihomo-router-v1", {url:conn.url, secret:conn.secret, path:conn.path, svc:conn.svc});
+async function api(method, path, body, timeout=8000){
+  if(HOST){
+    const r = await HOST.api(method, path, body);
+    if(!r || !r.ok){ const e = new Error(r?.data?.message || r?.error || ("HTTP " + (r?.code ?? "?"))); e.status = r?.code; throw e; }
+    return r.data;
+  }
+  const ctl = new AbortController(); const to = setTimeout(()=>ctl.abort(), timeout);
+  const h = {}; if(conn.secret) h.Authorization = "Bearer " + conn.secret;
+  if(body!==undefined) h["Content-Type"] = "application/json";
+  try{
+    const r = await fetch(conn.url.trim().replace(/\/+$/,"") + path, {method, headers:h, body:body!==undefined?JSON.stringify(body):undefined, signal:ctl.signal, cache:"no-store"});
+    const txt = await r.text(); let j = null; try{ j = txt ? JSON.parse(txt) : null; }catch(e){}
+    if(!r.ok){ const e = new Error(j?.message || txt || ("HTTP "+r.status)); e.status = r.status; throw e; }
+    return j;
+  } finally { clearTimeout(to); }
+}
+function apiErr(e){
+  if(e.name==="AbortError") return "Роутер не ответил вовремя";
+  if(e.status===401) return "Неверный secret (401)";
+  if(e instanceof TypeError) return location.protocol==="https:" ? "Страница на claude.ai не может обращаться к роутеру. Откройте офлайн-файл mihomo-configurator.html" : "Нет связи с API: проверьте адрес и порт, что компьютер в сети роутера и что external-controller доступен из LAN";
+  return e.message;
+}
+const lastDelay = x => { const h = x?.history; return h && h.length ? h[h.length-1].delay : undefined; };
+function delayHTML(d){
+  if(d===undefined) return "";
+  if(!d) return `<span class="dl bad">таймаут</span>`;
+  return `<span class="dl ${d<300?"good":d<800?"mid":"bad"}">${d} мс</span>`;
+}
+function ago(t){
+  if(!t) return ""; const d = typeof t==="string" ? new Date(t) : t; if(isNaN(d)) return "";
+  const s = Math.round((Date.now()-d)/1000);
+  return s<60 ? "только что" : s<3600 ? `${Math.round(s/60)} мин назад` : s<86400 ? `${Math.round(s/3600)} ч назад` : d.toLocaleDateString("ru-RU");
+}
+const gb = b => (b/1073741824).toFixed(b<10737418240?2:1).replace(/\.?0+$/,"") + " ГБ";
+function subInfo(si){
+  if(!si) return "";
+  const used = (si.Upload||0)+(si.Download||0), parts = [];
+  if(si.Total) parts.push(`трафик ${gb(used)} из ${gb(si.Total)}`); else if(used) parts.push(`использовано ${gb(used)}`);
+  if(si.Expire) parts.push(`до ${new Date(si.Expire*1000).toLocaleDateString("ru-RU")}`);
+  return parts.join(" · ");
+}
+async function connect(quiet){
+  if(HOST){
+    try{ const v = await api("GET","/version"); conn.ok = true; conn.err = ""; conn.version = v?.version || "?"; await refreshLive(true); }
+    catch(e){ conn.ok = false; conn.err = "mihomo не отвечает: " + apiErr(e); }
+    render(); return;
+  }
+  conn.url = ($("#rUrl")?.value ?? conn.url).trim(); conn.secret = ($("#rSecret")?.value ?? conn.secret).trim();
+  if(!conn.url){ if(!quiet) flash("Укажите адрес API", true); return; }
+  if(!/^https?:\/\//.test(conn.url)) conn.url = "http://" + conn.url;
+  saveConn();
+  try{ const v = await api("GET","/version"); conn.ok = true; conn.err = ""; conn.version = v?.version || "?"; await refreshLive(true); if(!quiet) flash("Подключено к mihomo " + conn.version); }
+  catch(e){ conn.ok = false; conn.err = apiErr(e); if(!quiet) flash(conn.err, true); }
+  render();
+}
+async function refreshLive(silent){
+  if(!conn.ok) return;
+  const [pp, px, rp] = await Promise.all([api("GET","/providers/proxies").catch(()=>null), api("GET","/proxies").catch(()=>null), api("GET","/providers/rules").catch(()=>null)]);
+  conn.live = {pp:pp?.providers||{}, px:px?.proxies||{}, rp:rp?.providers||{}, at:new Date()};
+  for(const p of provs){
+    const lp = conn.live.pp[p.name.trim()];
+    if(lp && Array.isArray(lp.proxies)){
+      p.nodes = lp.proxies.map(x=>({name:x.name, type:String(x.type||"").toLowerCase(), server:"", port:"", delay:lastDelay(x)}));
+      p.live = {updatedAt:lp.updatedAt, sub:lp.subscriptionInfo};
+    }
+  }
+  if(!silent){ render(); flash("Данные с роутера обновлены"); }
+}
+async function applyToRouter(btn){
+  if(HOST) return hostSave();
+  const y = $("#yaml").textContent;
+  const pr = problems();
+  if(pr.length && btn && !btn.dataset.armed){
+    btn.dataset.armed = "1"; const t = btn.textContent; btn.textContent = `Есть ${pr.length} предупр. — применить?`;
+    setTimeout(()=>{ if(btn.isConnected){ delete btn.dataset.armed; btn.textContent = t; } }, 4000); return;
+  }
+  if(btn){ btn.disabled = true; btn.textContent = "Применяю…"; }
+  try{
+    await api("PUT","/configs?force=true",{path:"", payload:y}, 30000);
+    let ns = ""; try{ ns = String(jsyaml.load(y)?.secret ?? ""); }catch(e){}
+    if(ns!==conn.secret){ conn.secret = ns; saveConn(); }
+    conn.lastApply = {ok:true, at:new Date()}; flash("Конфиг применён на роутере");
+    setTimeout(()=>refreshLive(false).catch(()=>{}), 2000);
+  }catch(e){ conn.lastApply = {ok:false, msg:apiErr(e)}; flash("Роутер не принял конфиг: " + apiErr(e), true); }
+  render();
+}
+async function setGroupNode(group, node){
+  try{ await api("PUT","/proxies/"+encodeURIComponent(group),{name:node}); const px = await api("GET","/proxies"); if(conn.live) conn.live.px = px?.proxies||{}; flash(`${group}: выбрана ${node}`); }
+  catch(e){ flash(apiErr(e), true); }
+  render();
+}
+function sshCmd(restart){
+  const path = conn.path.trim() || "/etc/mihomo/config.yaml";
+  const q = s => `'${s.replace(/'/g,"'\\''")}'`;
+  return `cp -f ${q(path)} ${q(path+".bak")} 2>/dev/null; cat > ${q(path)} <<'MIHOMO_CFG_END'\n${$("#yaml").textContent.replace(/\n$/,"")}\nMIHOMO_CFG_END\n` + (restart ? `/etc/init.d/${conn.svc.trim()||"mihomo"} restart\n` : "");
+}
+async function copyOrShow(text, okMsg){
+  try{ await navigator.clipboard.writeText(text); flash(okMsg); }
+  catch(e){ openDlg("show"); $("#pasteTa").value = text; $("#pasteTa").select(); }
+}
+function renderRouterHost(){
+  const la = host.last;
+  $("#main").innerHTML = `
+    <div class="panel">
+      <div class="lbl">Связь с роутером</div>
+      <div class="cstat${conn.err?" warn":""}">${conn.ok ? `<span class="dl good">●</span> ${esc(HOST_LABEL)} · mihomo ${esc(conn.version)}${conn.live?` · данные ${ago(conn.live.at)}`:""}` : esc(conn.err || "Подключаюсь…")}</div>
+      <div class="bar"><button id="rConnect">Обновить статус</button>${conn.ok && HOST.canWrite ? `<button id="rUpdAll">Обновить все подписки на роутере</button>` : ""}</div>
+    </div>
+    <div class="panel">
+      <div class="lbl">Сохранение</div>
+      <div class="small">«Сохранить на роутер» проверяет конфиг командой mihomo -t, делает резервную копию профиля, записывает его и перезапускает Nikki. Если mihomo не поднимется, предыдущая версия вернётся автоматически. Изменения сохраняются в файле и переживают перезагрузку.</div>
+      <div class="bar">${HOST.canWrite ? `<button id="rApply" class="primary">Сохранить на роутер</button>` : `<span class="small muted">У вас доступ только для просмотра</span>`}</div>
+      ${la ? `<div class="hostres" style="color:${la.ok?"var(--ok)":"var(--warn)"}">${esc(hostResultText(la))}</div>` : ""}
+    </div>
+    <div class="panel">
+      <div class="lbl">Безопасность API</div>
+      ${cfg?.secret ? `<div class="cstat">secret задан в конфиге ✓</div>`
+        : `<div class="cstat warn">В профиле не задан secret: любое устройство в сети может управлять mihomo через API.</div>
+           ${HOST.canWrite ? `<div class="bar"><button id="rGenSecret">Задать случайный secret</button><span class="small muted">Затем сохраните профиль на роутер.</span></div>` : ""}`}
+    </div>`;
+}
+function renderRouter(){
+  if(HOST) return renderRouterHost();
+  const https = location.protocol==="https:";
+  const ec = String(cfg?.["external-controller"]||"");
+  const la = conn.lastApply;
+  $("#main").innerHTML = `
+    ${https ? `<div class="note" style="color:var(--warn)">Эта вкладка работает только в офлайн-файле <b>mihomo-configurator.html</b>, открытом на компьютере в сети роутера. Страница на claude.ai открыта по https, и браузер не пускает её к роутеру по http.</div>` : ""}
+    <div class="panel">
+      <div class="lbl">Подключение к API mihomo</div>
+      <div class="row" style="grid-template-columns:minmax(0,2fr) minmax(0,1fr)">
+        <label class="f"><span>Адрес external-controller</span><input type="text" id="rUrl" class="mono" value="${esc(conn.url)}" placeholder="http://192.168.1.1:9090" spellcheck="false"></label>
+        <label class="f"><span>secret</span><input type="password" id="rSecret" class="mono" value="${esc(conn.secret)}" placeholder="не задан" autocomplete="off"></label>
+      </div>
+      <div class="bar"><button id="rConnect" class="primary">${conn.ok?"Переподключить":"Подключиться"}</button>
+        ${conn.ok?`<button id="rRefresh">Обновить данные</button><button id="rUpdAll">Обновить все подписки на роутере</button>`:""}</div>
+      <div class="cstat${conn.err?" warn":""}">${conn.ok ? `<span class="dl good">●</span> Подключено · mihomo ${esc(conn.version)}${conn.live?` · данные ${ago(conn.live.at)}`:""}` : esc(conn.err || "Не подключено")}</div>
+    </div>
+    <div class="panel">
+      <div class="lbl">Применить конфиг</div>
+      <div class="small">Отправляет текущий YAML в mihomo. mihomo сам проверяет конфиг: если в нём ошибка, он его не примет и покажет причину, а старый конфиг продолжит работать. Применённый так конфиг действует до перезапуска mihomo или роутера — чтобы сохранить его навсегда, используйте команду ниже.</div>
+      <div class="bar"><button id="rApply" class="primary"${conn.ok?"":" disabled"}>Применить на роутер</button></div>
+      ${la ? `<div class="cstat${la.ok?"":" warn"}">${la.ok ? `✓ Применено ${ago(la.at)}` : `✗ ${esc(la.msg)}`}</div>` : ""}
+    </div>
+    <div class="panel">
+      <div class="lbl">Сохранить в файл на роутере</div>
+      <div class="small">Скопируйте команду и вставьте её в SSH-сессию на роутере. Она сохранит старый файл как .bak и запишет новый.</div>
+      <div class="row" style="grid-template-columns:minmax(0,2fr) minmax(0,1fr)">
+        <label class="f"><span>Путь к конфигу на роутере</span><input type="text" id="rPath" class="mono" value="${esc(conn.path)}" spellcheck="false"></label>
+        <label class="f"><span>Служба</span><input type="text" id="rSvc" class="mono" value="${esc(conn.svc)}" spellcheck="false"></label>
+      </div>
+      <div class="bar"><button id="rSsh">Копировать команду</button><button id="rSshR">Копировать команду + перезапуск службы</button></div>
+    </div>
+    <div class="panel">
+      <div class="lbl">Безопасность API</div>
+      ${cfg?.secret ? `<div class="cstat">secret задан в конфиге ✓</div>`
+        : `<div class="cstat warn">API на ${esc(ec||"external-controller")} открыт без пароля: любое устройство в сети может поменять конфиг и увидеть ссылки подписок.</div>
+           <div class="bar"><button id="rGenSecret">Задать случайный secret</button><span class="small muted">После применения конфига подключение само переключится на новый secret.</span></div>`}
+    </div>`;
+}
+
+/* ===== Clients tab ===== */
+const CLIENT_RE = /^\(\(SRC-IP-CIDR,([^)]+)\),\(RULE-SET,([^)]+)\)\)$/;
+let clientNames = {};
+const saveClientNames = () => lsSet("mihomo-clients-v1", clientNames);
+const ipKey = v => String(v).replace(/\/(32|128)$/,"");
+const excFor = ip => rules.find(x => x.type==="AND" && (x.value.match(CLIENT_RE)||[])[1]===ip);
+const isClientRule = r => r.type==="SRC-IP-CIDR" || (r.type==="AND" && CLIENT_RE.test(r.value));
+function clientBlockEnd(){ let i = 0; while(i<rules.length && isClientRule(rules[i])) i++; return i-1; }
+function normIp(s){
+  s = s.trim(); if(!s) return "";
+  if(ip4(s)!==null) return s + "/32";
+  if(/^[0-9a-f:]+$/i.test(s) && s.includes(":")) return s + "/128";
+  return s;
+}
+function modeOf(t){
+  if(t==="DIRECT") return "direct";
+  if(t.startsWith("REJECT")) return "block";
+  if(t.startsWith("Client-") && groupNames().includes(t)) return "node";
+  return "vpn";
+}
+function defaultVpnGroup(){
+  const n = groupNames();
+  return n.includes("Auto") ? "Auto" : n.includes("PROXY") ? "PROXY" : (groupsS.find(g=>!g.data.name.startsWith("Client-"))?.data.name || "DIRECT");
+}
+function cleanupClientGroup(name){
+  if(!name || !name.startsWith("Client-")) return;
+  if(rules.some(r=>r.target===name) || groupsS.some(g=>(g.data.proxies||[]).includes(name))) return;
+  const i = groupsS.findIndex(g=>g.data.name===name); if(i<0) return;
+  groupsS.splice(i,1); provs.forEach(p=>p.groups.delete(name)); delete icons["grp:"+name];
+}
+function setClientMode(r, mode){
+  const old = r.target, ip = r.value;
+  if(mode==="direct") r.target = "DIRECT";
+  else if(mode==="block") r.target = "REJECT";
+  else if(mode==="vpn") r.target = defaultVpnGroup();
+  else if(mode==="node"){
+    let base = "Client-" + ((clientNames[ipKey(ip)]||"").trim().replace(/\s+/g,"-").replace(/[,()\[\]{}#:]/g,"") || ipKey(ip).replace(/[.:]/g,"-"));
+    let n = base, k = 2; while(groupNames().includes(n)) n = base + "-" + (k++);
+    const auto = groupsS.find(g=>g.data.name==="Auto");
+    const data = {name:n, type:"select"};
+    if(auto?.data["exclude-filter"]) data["exclude-filter"] = auto.data["exclude-filter"];
+    groupsS.push({id:uid(), data});
+    provs.filter(p=>p.enabled).forEach(p=>p.groups.add(n));
+    r.target = n;
+  }
+  if(mode==="direct" || mode==="block"){ const e = excFor(ip); if(e) rules.splice(rules.indexOf(e),1); }
+  if(old!==r.target) cleanupClientGroup(old);
+}
+function moveClientTop(r){
+  const e = excFor(r.value);
+  rules = rules.filter(x=>x!==r && x!==e);
+  const at = clientBlockEnd()+1;
+  rules.splice(at, 0, ...(e?[e,r]:[r]));
+}
+function renderClients(){
+  const list = rules.filter(r=>r.type==="SRC-IP-CIDR");
+  const be = clientBlockEnd();
+  const vpnGroups = groupNames().filter(n=>!n.startsWith("Client-"));
+  const rs = rprovs.map(x=>x.name);
+  const defRs = rs.includes("whitelist") ? "whitelist" : rs[0];
+  $("#main").innerHTML = `
+    <div class="bar" style="justify-content:space-between">
+      <span class="note small" style="flex:1 1 300px">Правила по IP устройства ставятся в самый верх, поэтому срабатывают раньше всех остальных. IP закрепите в OpenWrt: Network → DHCP and DNS → Static Leases. IPv6-трафик устройства этими правилами не ловится — для таких устройств лучше отключить IPv6.</span>
+      <button id="addClient" class="primary">+ Устройство</button>
+    </div>
+    <div class="col">` + (list.map(r => {
+      const i = rules.indexOf(r), k = ipKey(r.value), mode = modeOf(r.target), e = excFor(r.value);
+      const name = clientNames[k] || "";
+      const okIp = validCidr(r.value);
+      const low = i > be;
+      const firstOther = low ? rules.findIndex((x,j)=>j<i && !isClientRule(x)) : -1;
+      const tg = vpnGroups.includes(r.target) ? vpnGroups : [r.target, ...vpnGroups];
+      const seg = [["vpn","Через VPN"],["node","Своя нода"],["direct","Напрямую"],["block","Блок"]].map(([m,l])=>`<button data-act="cmode" data-mode="${m}" aria-pressed="${m===mode}">${l}</button>`).join("");
+      let opts = "";
+      if(mode==="vpn") opts = `<div class="copt">Группа <select data-c="target" id="ct-${r.id}">${tg.map(t=>`<option${t===r.target?" selected":""}>${esc(t)}</option>`).join("")}</select> <span class="muted small">${esc(GTYPE_RU[groupsS.find(g=>g.data.name===r.target)?.data.type]||"")}</span></div>`;
+      if(mode==="node"){ const lg = conn.live?.px?.[r.target];
+        opts = lg && Array.isArray(lg.all) ? `<div class="copt">Нода <select data-c="cnode" id="cnd-${r.id}">${lg.all.map(x=>`<option${x===lg.now?" selected":""}>${esc(x)}</option>`).join("")}</select> ${delayHTML(lastDelay(conn.live.px[lg.now]))} <span class="muted small">группа ${esc(r.target)}</span></div>`
+          : `<div class="copt">Группа <b>${esc(r.target)}</b> <span class="muted small">— ${conn.ok ? "примените конфиг на роутер, затем выберите ноду здесь" : "ноду выберите в zashboard или подключите роутер"}</span></div>`; }
+      if((mode==="vpn" || mode==="node") && rs.length) opts += `<div class="copt"><label class="switch"><input type="checkbox" data-c="exc" id="ce-${r.id}"${e?" checked":""}> кроме сайтов из списка</label>
+        <select data-c="excrs" id="cr-${r.id}"${e?"":" disabled"}>${rs.map(n=>`<option${n===((e&&e.value.match(CLIENT_RE)[2])||defRs)?" selected":""}>${esc(n)}</option>`).join("")}</select> → DIRECT</div>`;
+      const stat = !okIp ? `<div class="cstat warn">Укажите IP, например 192.168.1.50</div>`
+        : low ? `<div class="cstat warn">Правило №${i+1}: выше стоит №${firstOther+1} «${esc(ruleStr(rules[firstOther]))}», оно сработает раньше <button class="sm" data-act="ctop">Поднять наверх</button></div>`
+        : `<div class="cstat">Правило №${i+1}${e?` и исключение №${rules.indexOf(e)+1}`:""} · <code>${esc(ruleStr(r))}</code></div>`;
+      return `<section class="prov client" data-rid="${r.id}">
+        <div class="phead">
+          ${iconHTML(icons["cli:"+k] || {s:"phone"}, {key:"cli:"+k, lg:true})}
+          <input type="text" class="name" data-c="name" id="cn-${r.id}" value="${esc(name)}" placeholder="Имя устройства" aria-label="Имя устройства">
+          <input type="text" class="mono ipin" data-c="ip" id="ci-${r.id}" value="${esc(k)}" placeholder="192.168.1.50" aria-label="IP устройства" spellcheck="false">
+          <button class="ghost danger sm" data-act="cdel">Удалить</button>
+        </div>
+        <div class="seg" role="group" aria-label="Режим">${seg}</div>
+        ${opts}${stat}
+      </section>`;
+    }).join("") || `<div class="note">Устройств пока нет. Нажмите <b>+ Устройство</b>, впишите IP и выберите, как ему ходить в интернет.</div>`) + `</div>`;
+}
+
+/* ===== Groups tab ===== */
+function renderGroups(){
+  const tg = allTargets(), ruleCount = {};
+  rules.forEach(r=>ruleCount[r.target]=(ruleCount[r.target]||0)+1);
+  const refs = {}; groupsS.forEach(g=>(g.data.proxies||[]).forEach(m=>{ (refs[m] ||= []).push(g.data.name); }));
+  $("#main").innerHTML = `
+    <div class="bar" style="justify-content:space-between"><span class="note small" style="flex:1 1 260px">Порядок карточек = порядок групп в конфиге и в панели. В «Составе» первый участник — выбор по умолчанию; нажмите на имя, чтобы сделать его первым.</span><button id="addGroup" class="primary">+ Группа</button></div>
+    <div class="ggrid">` + groupsS.map((g,i) => {
+      const d = g.data, n = d.name, px = d.proxies||[];
+      const gn = groupNodes(g), usedBy = refs[n]||[];
+      const addOpts = tg.filter(t=>t!==n && !px.includes(t));
+      const provChips = provs.map(p=>{ const on = p.groups.has(n); return `<button class="chip${on?" on":""}${p.enabled?"":" muted"}" data-act="guse" data-pid="${p.id}" aria-pressed="${on}">${esc(p.name)}</button>`; }).join("");
+      const meta = [
+        ruleCount[n] ? `правил ведёт сюда: <b>${ruleCount[n]}</b>` : "",
+        usedBy.length ? `входит в: ${usedBy.map(esc).join(", ")}` : "",
+        gn.list.length ? `узлов: <b>${gn.list.length}</b>${gn.unknown?` + ещё ${gn.unknown} подп. не загружено`:""}` : (provs.some(p=>p.enabled&&p.groups.has(n)) ? "узлы не загружены" : ""),
+      ].filter(Boolean).join(" · ");
+      return `<section class="prov gcard" data-gid="${g.id}">
+        <div class="ghead">
+          <span style="display:contents;--tc:${targetColor(n)}">${iconHTML(groupIcon(g), {key:"grp:"+n, lg:true})}</span>
+          <input type="text" class="name" data-g="name" id="gn-${g.id}" value="${esc(n)}" aria-label="Имя группы">
+          <select data-g="type" id="gt-${g.id}" aria-label="Тип группы">${(GTYPES.includes(d.type)?GTYPES:[d.type,...GTYPES]).map(t=>`<option value="${t}"${t===d.type?" selected":""}>${t}</option>`).join("")}</select>
+        </div>
+        <div class="gmeta">${esc(GTYPE_RU[d.type]||"")}${meta?" · "+meta:""}</div>
+        ${(()=>{ const lg = conn.live?.px?.[n]; if(!lg) return conn.ok ? `<div class="live">На роутере группы нет — примените конфиг</div>` : "";
+          const now = lg.now || ""; const sel = lg.type==="Selector" && Array.isArray(lg.all);
+          return `<div class="live">Сейчас: ${sel ? `<select data-act="gsel" id="gs-${g.id}" aria-label="Выбрать узел">${lg.all.map(x=>`<option${x===now?" selected":""}>${esc(x)}</option>`).join("")}</select>` : `<b>${esc(now||"—")}</b>`}
+            ${delayHTML(lastDelay(conn.live.px[now]))}<button class="sm" data-act="gping">Пинг группы</button></div>`; })()}
+        <div class="chips"><span class="t">Состав</span>${px.map((m,k)=>`<span class="member${k===0?" first":""}${tg.includes(m)?"":" bad"}"><button data-act="gfirst" data-m="${esc(m)}" title="Сделать первым">${esc(m)}</button><button data-act="grm" data-m="${esc(m)}" aria-label="Убрать ${esc(m)}">×</button></span>`).join("")}
+          ${addOpts.length?`<select data-act="gadd" id="ga-${g.id}" aria-label="Добавить участника"><option value="">+ добавить</option>${addOpts.map(t=>`<option>${esc(t)}</option>`).join("")}</select>`:""}</div>
+        ${provs.length?`<div class="chips"><span class="t">Подписки</span>${provChips}</div>`:""}
+        <div class="row">
+          <label class="f"><span>filter</span><input type="text" class="mono" data-g="filter" id="gf-${g.id}" value="${esc(d.filter||"")}" placeholder="все узлы"></label>
+          <label class="f"><span>exclude-filter</span><input type="text" class="mono" data-g="exclude-filter" id="ge-${g.id}" value="${esc(d["exclude-filter"]||"")}" placeholder="нет"></label>
+        </div>
+        ${gn.list.length?`<div class="gnodes">${gn.list.slice(0,14).map(x=>`<span class="tag">${esc(x.name)}</span>`).join("")}${gn.list.length>14?`<span class="tag">+${gn.list.length-14}</span>`:""}</div>`:""}
+        <div class="gfoot">
+          <button class="ghost sm" data-act="gup"${i===0?" disabled":""} aria-label="Выше">↑</button>
+          <button class="ghost sm" data-act="gdown"${i===groupsS.length-1?" disabled":""} aria-label="Ниже">↓</button>
+          <button class="ghost danger sm" data-act="gdel">Удалить</button>
+        </div>
+      </section>`;
+    }).join("") + `</div>`;
+}
+function renameGroup(g, nn){
+  const old = g.data.name; nn = nn.trim();
+  if(!nn || nn===old) return false;
+  if(groupNames().includes(nn) || BUILTIN.includes(nn)){ flash(`Имя «${nn}» уже занято`, true); return false; }
+  g.data.name = nn;
+  if(icons["grp:"+old]){ icons["grp:"+nn] = icons["grp:"+old]; delete icons["grp:"+old]; saveIcons(); }
+  for(const x of groupsS) if(x.data.proxies) x.data.proxies = x.data.proxies.map(m=>m===old?nn:m);
+  for(const r of rules) if(r.target===old) r.target = nn;
+  for(const r of rprovs) if(r.data.proxy===old) r.data.proxy = nn;
+  for(const p of provs) if(p.groups.has(old)){ p.groups.delete(old); p.groups.add(nn); }
+  return true;
+}
+
+/* ---------- events ---------- */
+const main = $("#main");
+$("#mnav").addEventListener("click", e => {
+  const t = e.target.closest("[data-tab]"); if(!t) return;
+  if(ui.tab===t.dataset.tab){ window.scrollTo({top:0, behavior:"smooth"}); return; }
+  ui.tab = t.dataset.tab; lsSet(STORE_UI, {tab:ui.tab, noyaml:ui.noyaml}); render(); window.scrollTo(0,0);
+});
+mq.addEventListener?.("change", () => render());
+document.querySelector(".tabs").addEventListener("click", e => {
+  const t = e.target.closest(".tab"); if(!t) return;
+  ui.tab = t.dataset.tab; lsSet(STORE_UI, {tab:ui.tab, noyaml:ui.noyaml}); render();
+});
+$("#yamlToggle").onclick = () => { ui.noyaml = !ui.noyaml; lsSet(STORE_UI, {tab:ui.tab, noyaml:ui.noyaml}); render(); };
+
+main.addEventListener("input", e => {
+  const t = e.target;
+  if(t.id==="testIn"){ ui.test = t.value; renderTest(); return; }
+  if(t.id==="testIp"){ ui.testIp = t.value.trim(); renderTest(); return; }
+  if(t.id==="rPath"){ conn.path = t.value; saveConn(); return; }
+  if(t.id==="rSvc"){ conn.svc = t.value; saveConn(); return; }
+  if(t.id==="rsearch"){ ui.search = t.value; withFocus(renderRuleList); return; }
+  const cEl = t.closest(".client");
+  if(cEl){
+    const r = rules.find(x=>x.id===cEl.dataset.rid);
+    if(t.dataset.c==="name"){ clientNames[ipKey(r.value)] = t.value; saveClientNames(); }
+    return;
+  }
+  // subscriptions
+  const p = t.closest(".prov[data-id]") && byProv(t);
+  if(p){
+    if(t.dataset.k==="name"){
+      const auto = p.path === `./${p.name.toLowerCase()}.yaml`;
+      p.name = t.value;
+      if(auto){ p.path = `./${t.value.toLowerCase()}.yaml`; const pe = document.getElementById("p-"+p.id); if(pe) pe.value = p.path; }
+    }
+    else if(t.dataset.k && t.dataset.k!=="enabled") p[t.dataset.k] = t.value;
+    else if(t.dataset.h) p.hdr[t.dataset.h] = t.value;
+    refresh(); return;
+  }
+  // rules
+  const ruleEl = t.closest(".rule");
+  if(ruleEl && t.dataset.r==="value" && t.tagName==="INPUT"){ const r = rules.find(x=>x.id===ruleEl.dataset.id); r.value = t.value.trim(); refresh(); renderTest(); return; }
+  // rule-providers
+  const rpEl = t.closest("[data-rp]:not(input):not(select)");
+  if(rpEl && t.tagName==="INPUT" && t.dataset.rp && t.dataset.rp!=="name"){
+    const r = rprovs.find(x=>x.id===rpEl.dataset.rp); const k = t.dataset.rp;
+    if(k==="interval") r.data[k] = t.value==="" ? undefined : Number(t.value); else r.data[k] = t.value;
+    if(r.data[k]===undefined) delete r.data[k];
+    refresh(); return;
+  }
+  // groups
+  const gEl = t.closest(".gcard");
+  if(gEl && (t.dataset.g==="filter" || t.dataset.g==="exclude-filter")){
+    const g = groupsS.find(x=>x.id===gEl.dataset.gid); g.data[t.dataset.g] = t.value; refresh(); return;
+  }
+});
+
+main.addEventListener("change", e => {
+  const t = e.target;
+  if(t.id==="bulkPreset" || t.id==="bulkVer") return;
+  const cEl = t.closest(".client");
+  if(cEl){
+    const r = rules.find(x=>x.id===cEl.dataset.rid); const c = t.dataset.c;
+    if(c==="ip"){
+      const nv = normIp(t.value), old = r.value; if(nv===old) return;
+      if(nv && !validCidr(nv)) flash("Похоже, это не IP-адрес", true);
+      pushUndo(); r.value = nv;
+      const e = excFor(old); if(e) e.value = e.value.replace(`(SRC-IP-CIDR,${old})`, `(SRC-IP-CIDR,${nv})`);
+      const ok = ipKey(old), nk = ipKey(nv);
+      if(clientNames[ok]!==undefined){ clientNames[nk] = clientNames[ok]; delete clientNames[ok]; saveClientNames(); }
+      if(icons["cli:"+ok]){ icons["cli:"+nk] = icons["cli:"+ok]; delete icons["cli:"+ok]; saveIcons(); }
+    }
+    else if(c==="target"){ pushUndo(); const old = r.target; r.target = t.value; cleanupClientGroup(old); }
+    else if(c==="cnode"){ setGroupNode(r.target, t.value); return; }
+    else if(c==="exc"){
+      pushUndo(); const e = excFor(r.value);
+      if(t.checked && !e){ const rs = rprovs.map(x=>x.name); const n = rs.includes("whitelist") ? "whitelist" : rs[0];
+        rules.splice(rules.indexOf(r), 0, {id:uid(), type:"AND", value:`((SRC-IP-CIDR,${r.value}),(RULE-SET,${n}))`, target:"DIRECT", opts:[]}); }
+      if(!t.checked && e) rules.splice(rules.indexOf(e),1);
+    }
+    else if(c==="excrs"){ const e = excFor(r.value); if(e){ pushUndo(); e.value = `((SRC-IP-CIDR,${r.value}),(RULE-SET,${t.value}))`; } }
+    else return;
+    render(); return;
+  }
+  const p = t.closest(".prov[data-id]") && byProv(t);
+  if(p){
+    if(t.dataset.k==="enabled"){ pushUndo(); p.enabled = t.checked; render(); }
+    if(t.dataset.act==="preset" && t.value){ pushUndo(); applyPreset(p, t.value); render(); }
+    return;
+  }
+  const ruleEl = t.closest(".rule");
+  if(ruleEl){
+    const r = rules.find(x=>x.id===ruleEl.dataset.id); const k = t.dataset.r;
+    if(k==="type"){
+      pushUndo(); r.type = t.value;
+      if(r.type==="MATCH") r.value = "";
+      if(r.type==="RULE-SET" && !rprovs.some(x=>x.name===r.value)) r.value = rprovs[0]?.name || "";
+      if(!NO_RESOLVE.has(r.type)) r.opts = r.opts.filter(o=>o!=="no-resolve");
+    }
+    else if(k==="target"){ pushUndo(); r.target = t.value; }
+    else if(k==="value"){ r.value = t.value.trim(); }
+    else if(k==="nr"){ pushUndo(); r.opts = t.checked ? [...r.opts.filter(o=>o!=="no-resolve"), "no-resolve"] : r.opts.filter(o=>o!=="no-resolve"); }
+    withFocus(()=>{ if(k==="target") renderRules(); else renderRuleList(); }); refresh(); renderTest(); return;
+  }
+  const rpEl = t.closest("[data-rp]:not(input):not(select)");
+  if(rpEl && t.dataset.rp){
+    const r = rprovs.find(x=>x.id===rpEl.dataset.rp); const k = t.dataset.rp;
+    if(k==="name"){
+      const nn = t.value.trim(), old = r.name;
+      if(!nn || nn===old){ t.value = old; return; }
+      if(rprovs.some(x=>x.name===nn)){ flash(`Список «${nn}» уже есть`, true); t.value = old; return; }
+      pushUndo(); r.name = nn;
+      if(icons["rp:"+old]){ icons["rp:"+nn] = icons["rp:"+old]; delete icons["rp:"+old]; saveIcons(); }
+      rules.forEach(x=>{ if(x.type==="RULE-SET" && x.value===old) x.value = nn; });
+    } else if(t.tagName==="SELECT"){ pushUndo(); if(t.value) r.data[k] = t.value; else delete r.data[k]; }
+    else return;
+    render(); return;
+  }
+  const gEl = t.closest(".gcard");
+  if(gEl){
+    const g = groupsS.find(x=>x.id===gEl.dataset.gid);
+    if(t.dataset.g==="name"){ const old = g.data.name; pushUndo(); if(!renameGroup(g, t.value)){ undoStack.pop(); $("#undoBtn").disabled=!undoStack.length; t.value = old; return; } }
+    else if(t.dataset.g==="type"){
+      pushUndo(); g.data.type = t.value;
+      if(t.value!=="select" && t.value!=="relay"){ g.data.url ??= "http://gstatic.com/generate_204"; g.data.interval ??= 300; }
+    }
+    else if(t.dataset.act==="gadd" && t.value){ pushUndo(); (g.data.proxies ||= []).push(t.value); }
+    else if(t.dataset.act==="gsel"){ setGroupNode(g.data.name, t.value); return; }
+    else if(t.dataset.g==="filter" || t.dataset.g==="exclude-filter"){ /* already applied on input */ }
+    else return;
+    render();
+  }
+});
+
+main.addEventListener("click", async e => {
+  const b = e.target.closest("button"); if(!b) return;
+  // toolbar buttons by id
+  switch(b.id){
+    case "addProv": return addProv();
+    case "rConnect": b.disabled = true; b.textContent = "Подключаюсь…"; return connect(false);
+    case "rRefresh": return refreshLive(false).catch(e=>flash(apiErr(e), true));
+    case "rUpdAll": {
+      b.disabled = true; b.textContent = "Обновляю…";
+      const names = Object.keys(conn.live?.pp||{}).filter(n=>conn.live.pp[n].vehicleType && conn.live.pp[n].vehicleType!=="Compatible");
+      Promise.allSettled(names.map(n=>api("PUT","/providers/proxies/"+encodeURIComponent(n), undefined, 30000))).then(rs=>{ const bad = rs.filter(x=>x.status==="rejected").length; refreshLive(true).then(()=>{ render(); flash(bad?`Не обновились: ${bad} из ${names.length}`:`Обновлено подписок: ${names.length}`, !!bad); }); });
+      return;
+    }
+    case "rApply": return applyToRouter(b);
+    case "rSsh": return copyOrShow(sshCmd(false), "Команда скопирована — вставьте в SSH");
+    case "rSshR": return copyOrShow(sshCmd(true), "Команда скопирована — вставьте в SSH");
+    case "rGenSecret": {
+      pushUndo(); const a = new Uint8Array(18); crypto.getRandomValues(a);
+      cfg.secret = btoa(String.fromCharCode(...a)).replace(/[+/=]/g,"").slice(0,24);
+      render(); flash("secret добавлен в конфиг. Примените конфиг на роутер"); return;
+    }
+    case "addClient": {
+      pushUndo(); const r = {id:uid(), type:"SRC-IP-CIDR", value:"", target:defaultVpnGroup(), opts:[]};
+      rules.splice(clientBlockEnd()+1, 0, r); render();
+      document.getElementById("ci-"+r.id)?.focus(); return;
+    }
+    case "bulkApply": {
+      const k = $("#bulkPreset").value, v = $("#bulkVer").value.trim();
+      if(!k && !v){ flash("Выберите пресет или впишите версию", true); return; }
+      pushUndo(); for(const p of provs){ if(k) applyPreset(p,k); if(v) p.hdr.ver = v; }
+      render(); flash("Применено ко всем подпискам"); return;
+    }
+    case "addRule": pushUndo(); return addRule({id:uid(), type:"DOMAIN-SUFFIX", value:"", target:"DIRECT", opts:[]});
+    case "bulkRules": return openDlg("rules");
+    case "addRP": {
+      pushUndo(); let n = "list", k = 1; while(rprovs.some(x=>x.name===n+k)) k++; n += k;
+      const via = groupNames().includes("PROXY") ? "PROXY" : "DIRECT";
+      rprovs.push({id:uid(), name:n, data:{type:"http", behavior:"domain", format:"text", url:"", path:`./ruleset/${n}.txt`, interval:86400, proxy:via}});
+      render(); setTimeout(()=>document.getElementById("rpu-"+rprovs[rprovs.length-1].id)?.focus(),0); return;
+    }
+    case "addGroup": {
+      pushUndo(); let n = "Group", k = 1; while(groupNames().includes(n+k)) k++; n += k;
+      groupsS.push({id:uid(), data:{name:n, type:"url-test", url:"http://gstatic.com/generate_204", interval:300, tolerance:50, lazy:true}});
+      provs.forEach(p=>p.groups.add(n));
+      render(); setTimeout(()=>{ const el=document.getElementById("gn-"+groupsS[groupsS.length-1].id); el?.focus(); el?.select(); },0); return;
+    }
+  }
+  const act = b.dataset.act;
+  if(act==="icon"){ openIconPicker(b.dataset.key); return; }
+  const cEl = b.closest(".client");
+  if(cEl){
+    const r = rules.find(x=>x.id===cEl.dataset.rid);
+    if(act==="cmode"){ if(modeOf(r.target)===b.dataset.mode) return; pushUndo(); setClientMode(r, b.dataset.mode); }
+    else if(act==="ctop"){ pushUndo(); moveClientTop(r); }
+    else if(act==="cdel"){ pushUndo(); const e = excFor(r.value); rules = rules.filter(x=>x!==r && x!==e); cleanupClientGroup(r.target); flash("Устройство удалено"); }
+    else return;
+    render(); return;
+  }
+  // legend filter
+  if(act==="tf"){ ui.tfilter = ui.tfilter===b.dataset.t ? "" : b.dataset.t; withFocus(renderRules); return; }
+  // subscriptions
+  const p = b.closest(".prov[data-id]") && byProv(b);
+  if(p){
+    const i = provs.indexOf(p);
+    switch(act){
+      case "del": pushUndo(); provs.splice(i,1); render(); flash(`Подписка «${p.name}» удалена`); break;
+      case "up": if(i>0){ pushUndo(); [provs[i-1],provs[i]]=[provs[i],provs[i-1]]; render(); } break;
+      case "down": if(i<provs.length-1){ pushUndo(); [provs[i+1],provs[i]]=[provs[i],provs[i+1]]; render(); } break;
+      case "hwid": pushUndo(); p.hdr.hwid = uuid(); render(); break;
+      case "grp": { pushUndo(); const g=b.dataset.g; p.groups.has(g)?p.groups.delete(g):p.groups.add(g); render(); } break;
+      case "nopen": p.open = true; render(); break;
+      case "plive": refreshLive(false).catch(e=>flash(apiErr(e), true)); break;
+      case "pupd":
+        b.disabled = true; b.textContent = "Обновляю…";
+        api("PUT","/providers/proxies/"+encodeURIComponent(p.name.trim()), undefined, 30000).then(()=>refreshLive(false)).catch(e=>{ flash(apiErr(e), true); render(); }); break;
+      case "pping":
+        b.disabled = true; b.textContent = "Проверяю…";
+        api("GET","/providers/proxies/"+encodeURIComponent(p.name.trim())+"/healthcheck", undefined, 60000).then(()=>refreshLive(false)).catch(e=>{ flash(apiErr(e), true); render(); }); break;
+      case "nclear": p.nodes = null; p.open = false; delete nodesCache[p.url]; saveNodes(); render(); break;
+      case "curl": copyText(curlCmd(p), "curl скопирован"); break;
+      case "pastenodes": openDlg("nodes", p); break;
+      case "fetch": {
+        if(!p.url){ flash("Сначала укажите ссылку", true); break; }
+        b.disabled = true; b.textContent = "Загрузка…";
+        try{
+          const ctl = new AbortController(); const to = setTimeout(()=>ctl.abort(), 10000);
+          const r = await fetch(p.url, {signal:ctl.signal, cache:"no-store"}); clearTimeout(to);
+          if(!r.ok) throw new Error("HTTP " + r.status);
+          p.nodes = parseNodes(await r.text()); nodesCache[p.url] = p.nodes; saveNodes();
+          flash(`Загружено узлов: ${p.nodes.length}`); render();
+        }catch(err){
+          b.disabled = false; b.textContent = "Загрузить";
+          flash(err.name==="TypeError"||err.name==="AbortError" ? "Браузер не пустил запрос. Скопируйте curl и вставьте ответ" : "Ошибка: "+err.message, true);
+        }
+      } break;
+    }
+    return;
+  }
+  // rules
+  const ruleEl = b.closest(".rule");
+  if(ruleEl && act==="rdel"){
+    const i = rules.findIndex(r=>r.id===ruleEl.dataset.id); pushUndo(); rules.splice(i,1);
+    withFocus(renderRules); refresh(); renderTest(); flash("Правило удалено"); return;
+  }
+  const rpEl = b.closest("[data-rp]:not(input):not(select)");
+  if(rpEl){
+    const r = rprovs.find(x=>x.id===rpEl.dataset.rp);
+    if(act==="rpdel"){ pushUndo(); rprovs.splice(rprovs.indexOf(r),1); render(); flash(`Список «${r.name}» удалён`); }
+    if(act==="rpupd"){ b.disabled = true; api("PUT","/providers/rules/"+encodeURIComponent(r.name)).then(()=>refreshLive(false)).catch(e=>{ flash(apiErr(e), true); render(); }); return; }
+    if(act==="rpuse"){ pushUndo(); addRule({id:uid(), type:"RULE-SET", value:r.name, target:"DIRECT", opts:[]}); }
+    return;
+  }
+  // groups
+  const gEl = b.closest(".gcard");
+  if(gEl){
+    const g = groupsS.find(x=>x.id===gEl.dataset.gid), i = groupsS.indexOf(g), n = g.data.name;
+    switch(act){
+      case "guse": { pushUndo(); const pp = provs.find(x=>x.id===b.dataset.pid); pp.groups.has(n)?pp.groups.delete(n):pp.groups.add(n); } break;
+      case "gfirst": { pushUndo(); const m=b.dataset.m; g.data.proxies = [m, ...g.data.proxies.filter(x=>x!==m)]; } break;
+      case "grm": { pushUndo(); const m=b.dataset.m; g.data.proxies = g.data.proxies.filter(x=>x!==m); } break;
+      case "gup": if(i>0){ pushUndo(); [groupsS[i-1],groupsS[i]]=[groupsS[i],groupsS[i-1]]; } break;
+      case "gdown": if(i<groupsS.length-1){ pushUndo(); [groupsS[i+1],groupsS[i]]=[groupsS[i],groupsS[i+1]]; } break;
+      case "gping":
+        b.disabled = true; b.textContent = "Проверяю…";
+        api("GET", `/group/${encodeURIComponent(n)}/delay?url=${encodeURIComponent("http://gstatic.com/generate_204")}&timeout=3000`, undefined, 20000)
+          .then(()=>refreshLive(false)).catch(e=>{ flash(apiErr(e), true); render(); });
+        return;
+      case "gdel":
+        pushUndo(); groupsS.splice(i,1);
+        groupsS.forEach(x=>{ if(x.data.proxies) x.data.proxies = x.data.proxies.filter(m=>m!==n); });
+        provs.forEach(p=>p.groups.delete(n));
+        flash(`Группа «${n}» удалена. Правила, которые вели в неё, отмечены`); break;
+      default: return;
+    }
+    render();
+  }
+});
+
+/* drag & drop of rule tiles (pointer events — works with mouse and touch) */
+let drag = null;
+main.addEventListener("pointerdown", e => {
+  const h = e.target.closest("button.handle"); if(!h || e.button>0) return;
+  const tile = h.closest(".rule"), list = $("#rulesList");
+  e.preventDefault(); h.setPointerCapture(e.pointerId);
+  drag = {tile, list, id:e.pointerId, moved:false};
+  tile.classList.add("dragging"); list.classList.add("sorting");
+});
+main.addEventListener("pointermove", e => {
+  if(!drag || e.pointerId!==drag.id) return;
+  const y = e.clientY;
+  const tiles = [...drag.list.querySelectorAll(".rule:not(.dragging)")];
+  let before = null;
+  for(const t of tiles){ const r = t.getBoundingClientRect(); if(y < r.top + r.height/2){ before = t; break; } }
+  if(before){ if(drag.tile.nextElementSibling!==before){ drag.list.insertBefore(drag.tile, before); drag.moved = true; } }
+  else if(drag.list.lastElementChild!==drag.tile){ drag.list.appendChild(drag.tile); drag.moved = true; }
+  if(y < 70) window.scrollBy(0,-16); else if(y > innerHeight-70) window.scrollBy(0,16);
+});
+function endDrag(){
+  if(!drag) return;
+  const {tile, list, moved} = drag; drag = null;
+  tile.classList.remove("dragging"); list.classList.remove("sorting");
+  if(!moved) return;
+  pushUndo();
+  const order = [...list.querySelectorAll(".rule")].map(t=>t.dataset.id);
+  rules = order.map(id=>rules.find(r=>r.id===id));
+  renderRuleList(); refresh(); renderTest();
+}
+main.addEventListener("pointerup", endDrag);
+main.addEventListener("pointercancel", endDrag);
+main.addEventListener("keydown", e => {
+  const h = e.target.closest("button.handle"); if(!h) return;
+  if(e.key==="ArrowUp" || e.key==="ArrowDown"){ e.preventDefault(); moveRule(h.closest(".rule").dataset.id, e.key==="ArrowUp"?-1:1); }
+});
+document.addEventListener("error", e => {
+  const im = e.target; if(!im || im.tagName!=="IMG") return;
+  failedImg.add(im.getAttribute("src"));
+  const w = im.closest(".ic");
+  if(w && im.dataset.fb){
+    const fb = JSON.parse(im.dataset.fb);
+    if(fb.l && !fb.s){ w.innerHTML = letterTxt(fb.l); w.classList.add("lt"); w.style.setProperty("--lc", hashColor(fb.l)); }
+    else w.innerHTML = svgIcon(fb.s||"globe");
+    return;
+  }
+  im.remove();
+}, true);
+
+/* ---------- icon picker ---------- */
+const icDlg = $("#iconDlg"); let icKey = "", icTab = "own";
+function icTarget(){
+  const [kind, ...rest] = icKey.split(":"); const name = rest.join(":");
+  return {kind, name, group: kind==="grp" ? groupsS.find(g=>g.data.name===name) : null};
+}
+function openIconPicker(key){
+  icKey = key; const t = icTarget();
+  const label = {rule:"правила", rp:"списка", prov:"подписки", grp:"группы", cli:"устройства"}[t.kind];
+  $("#icTitle").textContent = `Иконка ${label}: ${t.kind==="rule" ? t.name : t.name}`;
+  $("#icNote").innerHTML = t.kind==="grp"
+    ? "Qure и своя ссылка записываются в <code>icon</code> группы: их покажет zashboard. «Значки» видны только в конфигураторе. Картинки Qure грузятся из интернета; в версии на claude.ai видны только подписи, в локальном файле — сами картинки."
+    : "Иконка видна только в конфигураторе и в YAML не попадает. Картинки Qure грузятся из интернета; в версии на claude.ai видны только подписи, в локальном файле — сами картинки.";
+  $("#icSearch").value = ""; icTab = t.kind==="grp" && t.group?.data.icon ? "qure" : "own";
+  renderIconGrid(); icDlg.showModal(); $("#icSearch").focus();
+}
+function renderIconGrid(){
+  document.querySelectorAll("[data-ictab]").forEach(b=>b.setAttribute("aria-selected", String(b.dataset.ictab===icTab)));
+  const q = $("#icSearch").value.trim().toLowerCase();
+  $("#icUrlRow").hidden = icTab!=="url"; $("#icGrid").hidden = icTab==="url"; $("#icSearch").hidden = icTab==="url";
+  if(icTab==="url"){ const g = icTarget().group; $("#icUrlIn").value = g?.data.icon || icons[icKey]?.u || ""; return; }
+  if(icTab==="own"){
+    $("#icGrid").innerHTML = Object.keys(SVG).filter(k=>!q || k.includes(q) || (SVG_RU_LABEL[k]||"").toLowerCase().includes(q))
+      .map(k=>`<button data-ic="s:${k}">${svgIcon(k)}<span class="cap">${esc(SVG_RU_LABEL[k]||k)}</span></button>`).join("") || `<div class="muted small">Ничего не найдено</div>`;
+  } else {
+    $("#icGrid").innerHTML = QURE.filter(n=>!q || n.toLowerCase().replace(/_/g," ").includes(q))
+      .map(n=>`<button data-ic="q:${esc(n)}" title="${esc(n)}"><img src="${esc(qureUrl(n))}" alt="" loading="lazy"><span class="cap">${esc(n.replace(/_/g," "))}</span></button>`).join("") || `<div class="muted small">Ничего не найдено</div>`;
+  }
+}
+function applyIcon(ref){
+  const t = icTarget();
+  if(t.kind==="grp" && t.group){
+    pushUndo();
+    if(ref && (ref.q || ref.u)){ t.group.data.icon = ref.q ? qureUrl(ref.q) : ref.u; delete icons[icKey]; }
+    else { delete t.group.data.icon; if(ref) icons[icKey] = ref; else delete icons[icKey]; }
+  } else { if(ref) icons[icKey] = ref; else delete icons[icKey]; }
+  saveIcons(); icDlg.close(); render();
+}
+document.querySelectorAll("[data-ictab]").forEach(b => b.onclick = () => { icTab = b.dataset.ictab; renderIconGrid(); });
+$("#icSearch").oninput = renderIconGrid;
+$("#icGrid").onclick = e => { const b = e.target.closest("[data-ic]"); if(!b) return; const [k, v] = [b.dataset.ic.slice(0,1), b.dataset.ic.slice(2)]; applyIcon(k==="s" ? {s:v} : {q:v}); };
+$("#icGrid").addEventListener("error", e => { if(e.target.tagName==="IMG") e.target.remove(); }, true);
+$("#icUrlOk").onclick = () => { const u = $("#icUrlIn").value.trim(); if(!/^(https?:|data:image\/)/.test(u)){ flash("Нужна ссылка http(s)://", true); return; } applyIcon({u}); };
+$("#icAuto").onclick = () => applyIcon(null);
+$("#icClose").onclick = () => icDlg.close();
+
+/* ---------- dialog ---------- */
+const dlg = $("#pasteDlg"); let dlgMode = "config", dlgProv = null;
+function openDlg(mode, p){
+  dlgMode = mode; dlgProv = p || null;
+  $("#pasteTitle").textContent = mode==="rules" ? "Правила, по одному в строке (DOMAIN-SUFFIX,example.com,DIRECT)" : mode==="nodes" ? `Ответ подписки «${p.name}»: base64, ссылки vless://… или YAML с proxies` : "Вставьте содержимое config.yaml";
+  $("#pasteOk").textContent = mode==="rules" ? "Добавить" : "Загрузить";
+  $("#pasteOk").hidden = mode==="show";
+  $("#pasteTa").hidden = mode==="newprofile"; $("#newName").hidden = mode!=="newprofile";
+  if(mode==="newprofile"){ $("#pasteTitle").textContent = "Имя нового профиля на роутере (будет сделан активным)"; $("#pasteOk").textContent = "Сохранить"; $("#newName").value = host.cur && host.cur.kind==="file" ? host.cur.name.replace(/\.ya?ml$/,"") + "-copy.yaml" : "main.yaml"; setTimeout(()=>$("#newName").select(),0); }
+  if(mode==="show") $("#pasteTitle").textContent = "Буфер обмена недоступен — выделите текст и скопируйте вручную (Ctrl+C)";
+  $("#pasteErr").textContent = ""; $("#pasteTa").value = "";
+  dlg.showModal(); $("#pasteTa").focus();
+}
+$("#pasteBtn").onclick = () => openDlg("config");
+$("#pasteCancel").onclick = () => dlg.close();
+$("#pasteOk").onclick = () => {
+  const text = $("#pasteTa").value;
+  try{
+    if(dlgMode==="newprofile"){ const n = $("#newName").value.trim(); if(!n) throw new Error("Укажите имя"); dlg.close(); hostSave(n); return; }
+    if(dlgMode==="config"){ pushUndo(); load(text, "вставленный"); $("#hint").hidden = true; flash("Конфиг загружен"); }
+    else if(dlgMode==="nodes"){ const p = dlgProv; p.nodes = parseNodes(text); nodesCache[p.url] = p.nodes; saveNodes(); render(); flash(`Узлов: ${p.nodes.length}`); }
+    else {
+      const lines = text.split(/\r?\n/).map(l=>l.trim().replace(/^-\s*/,"").replace(/^["']|["']$/g,"")).filter(l=>l && !l.startsWith("#") && l.includes(","));
+      if(!lines.length) throw new Error("Не нашёл строк вида ТИП,значение,цель");
+      pushUndo(); const add = lines.map(parseRule);
+      const last = rules[rules.length-1], at = last && last.type==="MATCH" && !add.some(r=>r.type==="MATCH") ? rules.length-1 : rules.length;
+      rules.splice(at, 0, ...add); ui.search=""; ui.tfilter=""; render(); flash(`Добавлено правил: ${add.length}`);
+    }
+    dlg.close();
+  }catch(err){ $("#pasteErr").textContent = "Ошибка: " + err.message; }
+};
+
+/* ---------- file / save / copy ---------- */
+$("#file").onchange = async e => {
+  const f = e.target.files[0]; if(!f) return;
+  try{ const t = await f.text(); if(cfg) pushUndo(); load(t, f.name); $("#fname").value = f.name; $("#hint").hidden = true; flash("Загружен "+f.name); }
+  catch(err){ flash("Не удалось разобрать файл: "+err.message, true); }
+  e.target.value = "";
+};
+$("#applyBtn").onclick = e => applyToRouter(e.currentTarget);
+$("#copyBtn").onclick = async () => {
+  const t = $("#yaml").textContent;
+  try{ await navigator.clipboard.writeText(t); flash("Скопировано"); }
+  catch(e){ const r=document.createRange(); r.selectNodeContents($("#yaml")); const s=getSelection(); s.removeAllRanges(); s.addRange(r); flash("Выделено — нажмите Ctrl+C"); }
+};
+function fileName(){
+  let n = $("#fname").value.trim() || "config.yaml";
+  if(!/\.ya?ml$/i.test(n)) n += ".yaml";
+  return n;
+}
+function localDownload(name, text){
+  const url = URL.createObjectURL(new Blob([text], {type:"application/x-yaml"}));
+  const a = Object.assign(document.createElement("a"), {href:url, download:name});
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+}
+$("#saveBtn").onclick = async () => {
+  const text = $("#yaml").textContent, name = fileName();
+  const dl = window.claude?.use ? await window.claude.use("downloads").catch(()=>null) : null;
+  if(!dl){ localDownload(name, text); flash("Сохранено: "+name); return; }
+  try{ await dl.save({filename:name, data:text}); flash("Сохранено: "+name); }
+  catch(e){
+    if(e?.code === "rejected_extension"){
+      try{ await dl.save({filename:name+".txt", data:text}); flash("Сохранено как "+name+".txt — уберите .txt"); }
+      catch(e2){ if(e2?.code!=="declined") flash("Не удалось сохранить: "+(e2?.message||e2?.code), true); }
+    } else if(e?.code === "declined") {}
+    else if(e?.code === "rate_limited") flash("Окно сохранения уже открыто", true);
+    else flash("Сохранение недоступно, используйте «Копировать»", true);
+  }
+};
+
+let tt;
+function flash(msg, err){ const t=$("#toast"); t.textContent=msg; t.className = err?"toast err":"toast"; clearTimeout(tt); tt=setTimeout(()=>t.textContent="",3500); }
+
+renderNav();
+(function init(){
+  nodesCache = lsGet(STORE_NODES, {}) || {};
+  icons = lsGet("mihomo-icons-v1", {}) || {};
+  clientNames = lsGet("mihomo-clients-v1", {}) || {};
+  const rc = lsGet("mihomo-router-v1", null);
+  if(rc){ Object.assign(conn, {url:rc.url||"", secret:rc.secret||"", path:rc.path||conn.path, svc:rc.svc||conn.svc}); }
+  if(HOST){
+    const u0 = lsGet(STORE_UI, null); if(u0 && ["subs","rules","groups","clients","router","yaml"].includes(u0.tab)) ui.tab = u0.tab;
+    document.title = (HOST.title ? HOST.title + " · " : "") + "Конфигуратор";
+    hostInit(); return;
+  }
+  setTimeout(()=>{ if(!conn.url){ const m = String(cfg?.["external-controller"]||"").match(/:(\d+)$/); conn.url = "http://192.168.1.1:" + (m?m[1]:"9090"); if(cfg?.secret) conn.secret = String(cfg.secret); }
+    else if(location.protocol!=="https:") connect(true); }, 0);
+  const u = lsGet(STORE_UI, null); if(u){ if(["subs","rules","groups","clients","router","yaml"].includes(u.tab)) ui.tab = u.tab; ui.noyaml = !!u.noyaml; }
+  if(["subs","rules","groups","clients","router","yaml"].includes(location.hash.slice(1))) ui.tab = location.hash.slice(1);
+  const saved = lsGet(STORE, null);
+  try{ if(saved && saved.text){ load(saved.text, saved.name||"сохранённый"); $("#hint").hidden = true; return; } }catch(e){}
+  load(SAMPLE, "пример");
+})();
+</script>
+</body>
+</html>

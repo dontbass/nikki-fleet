@@ -1,0 +1,15 @@
+# Панель nikki-fleet. Поставьте перед ней обратный прокси с HTTPS
+# (Nginx Proxy Manager, Caddy, Traefik) и укажите NF_PUBLIC_URL.
+services:
+  panel:
+    image: ghcr.io/dontbass/nikki-fleet-panel:latest
+    container_name: nikki-fleet
+    restart: unless-stopped
+    environment:
+      NF_PUBLIC_URL: https://fleet.example.com   # адрес, по которому роутеры и браузер видят панель
+      NF_TRUST_PROXY: "1"                        # панель за обратным прокси
+      # NF_REGISTRATION: open                    # открыть регистрацию для всех
+    volumes:
+      - ./data:/data
+    ports:
+      - "127.0.0.1:8080:8080"

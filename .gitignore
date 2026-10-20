@@ -1,0 +1,6 @@
+/panel/data/
+/panel/nikki-fleet-panel
+/dist/
+*.ipk
+*.apk
+.DS_Store

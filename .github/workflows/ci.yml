@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  panel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: configurator copies are in sync
+        run: ./scripts/sync-configurator.sh && git diff --exit-code
+      - name: gofmt
+        working-directory: panel
+        run: test -z "$(gofmt -l .)"
+      - name: vet and test
+        working-directory: panel
+        run: go vet ./... && go test ./...
+      - name: build
+        working-directory: panel
+        run: CGO_ENABLED=0 go build -o nikki-fleet-panel .
+
+  packages:
+    name: packages ${{ matrix.branch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: [ openwrt-24.10, openwrt-25.12 ]
+    steps:
+      - uses: actions/checkout@v4
+      - name: put packages at the feed root
+        run: cp -r openwrt/* .
+      - name: build
+        uses: openwrt/gh-action-sdk@main
+        env:
+          ARCH: x86_64-${{ matrix.branch }}
+          FEEDNAME: nikki_fleet
+          PACKAGES: nikki-fleet luci-app-nikki-fleet
+          EXTRA_FEEDS: src-git|nikki|https://github.com/nikkinikki-org/OpenWrt-nikki.git;main
+          NO_REFRESH_CHECK: true
+          INDEX: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages-${{ matrix.branch }}
+          path: |
+            bin/packages/x86_64/nikki_fleet/*.ipk
+            bin/packages/x86_64/nikki_fleet/*.apk
+          if-no-files-found: error

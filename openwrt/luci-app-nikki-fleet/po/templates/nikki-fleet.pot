@@ -1,0 +1,66 @@
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8"
+
+msgid "Agent is not running"
+msgstr ""
+
+msgid "Cannot read profile"
+msgstr ""
+
+msgid "Code"
+msgstr ""
+
+msgid "Configurator"
+msgstr ""
+
+msgid "Connect"
+msgstr ""
+
+msgid "Connect to a panel"
+msgstr ""
+
+msgid "Connect to another panel"
+msgstr ""
+
+msgid "Connected"
+msgstr ""
+
+msgid "Connection failed"
+msgstr ""
+
+msgid "Disconnect from panel"
+msgstr ""
+
+msgid "In the panel press \"Connect router\", then enter the panel address and the one-time code here."
+msgstr ""
+
+msgid "Panel"
+msgstr ""
+
+msgid "Panel address"
+msgstr ""
+
+msgid "Remote management"
+msgstr ""
+
+msgid "Router ID"
+msgstr ""
+
+msgid "Router connected to the panel"
+msgstr ""
+
+msgid "Self-signed certificate"
+msgstr ""
+
+msgid "Status"
+msgstr ""
+
+msgid "This router is not connected to a panel."
+msgstr ""
+
+msgid "do not verify TLS (testing only)"
+msgstr ""
+
+msgid "nikki-fleet lets you see the status of this router and edit its Nikki profile from a web panel, from anywhere. The router connects to the panel itself, so no open ports or public IP are needed. Every change is checked with mihomo -t and rolled back automatically if mihomo does not start."
+msgstr ""
+

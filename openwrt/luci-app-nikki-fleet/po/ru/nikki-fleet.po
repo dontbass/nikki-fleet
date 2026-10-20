@@ -1,0 +1,69 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: ru\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+msgid "Agent is not running"
+msgstr "Агент не запущен"
+
+msgid "Cannot read profile"
+msgstr "Не удалось прочитать профиль"
+
+msgid "Code"
+msgstr "Код"
+
+msgid "Configurator"
+msgstr "Конфигуратор"
+
+msgid "Connect"
+msgstr "Подключить"
+
+msgid "Connect to a panel"
+msgstr "Подключение к панели"
+
+msgid "Connect to another panel"
+msgstr "Подключить к другой панели"
+
+msgid "Connected"
+msgstr "Подключён"
+
+msgid "Connection failed"
+msgstr "Не удалось подключиться"
+
+msgid "Disconnect from panel"
+msgstr "Отключить от панели"
+
+msgid "In the panel press \"Connect router\", then enter the panel address and the one-time code here."
+msgstr "В панели нажмите «Подключить роутер» и введите здесь адрес панели и одноразовый код."
+
+msgid "Panel"
+msgstr "Панель"
+
+msgid "Panel address"
+msgstr "Адрес панели"
+
+msgid "Remote management"
+msgstr "Удалённое управление"
+
+msgid "Router ID"
+msgstr "ID роутера"
+
+msgid "Router connected to the panel"
+msgstr "Роутер подключён к панели"
+
+msgid "Self-signed certificate"
+msgstr "Самоподписанный сертификат"
+
+msgid "Status"
+msgstr "Статус"
+
+msgid "This router is not connected to a panel."
+msgstr "Роутер не подключён к панели."
+
+msgid "do not verify TLS (testing only)"
+msgstr "не проверять TLS (только для тестов)"
+
+msgid "nikki-fleet lets you see the status of this router and edit its Nikki profile from a web panel, from anywhere. The router connects to the panel itself, so no open ports or public IP are needed. Every change is checked with mihomo -t and rolled back automatically if mihomo does not start."
+msgstr "nikki-fleet позволяет видеть состояние роутера и редактировать профиль Nikki из веб-панели откуда угодно. Роутер сам подключается к панели, поэтому не нужны открытые порты и белый IP. Каждое изменение проверяется командой mihomo -t и автоматически откатывается, если mihomo не запустился."
+

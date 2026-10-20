@@ -1,0 +1,288 @@
+#!/usr/bin/ucode
+// nikki-fleet CLI and remote-management agent.
+// SPDX-License-Identifier: GPL-3.0-or-later
+'use strict';
+
+import { readfile, writefile, unlink, stat, mkdir } from 'fs';
+import * as ops from '/usr/share/ucode/nikki_fleet/ops.uc';
+
+const P = ops.P;
+const q = ops.q;
+
+function out(v) { print(sprintf('%.2J\n', v)); }
+function log(msg) { warn(sprintf('[nikki-fleet] %s\n', msg)); }
+function die(msg) { warn('error: ' + msg + '\n'); exit(1); }
+
+/* ---------- HTTP to the panel ---------- */
+
+function http(method, url, body, timeout, token, insecure) {
+	let cmd = 'curl -sS -X ' + method + ' --max-time ' + int(timeout) + " -w '\\n%{http_code}' -H 'Accept: application/json'";
+	if (insecure)
+		cmd += ' -k';
+	if (token)
+		cmd += ' -H ' + q('Authorization: Bearer ' + token);
+	let f = null;
+	if (body != null) {
+		f = ops.tmpname('req') + '.json';
+		writefile(f, sprintf('%J', body));
+		cmd += " -H 'Content-Type: application/json' --data-binary @" + q(f);
+	}
+	const r = ops.sh(cmd + ' ' + q(url));
+	if (f)
+		unlink(f);
+	const nl = rindex(r.out, '\n');
+	const code = nl >= 0 ? int(substr(r.out, nl + 1)) : 0;
+	const text = nl >= 0 ? substr(r.out, 0, nl) : r.out;
+	let data = null;
+	try { data = length(text) ? json(text) : null; } catch (e) {}
+	return { ok: code >= 200 && code < 300, code: code, data: data, error: code ? null : trim(text) };
+}
+
+function agent_cfg() {
+	return {
+		server: rtrim(ops.uci_get('nikki-fleet.agent.server') ?? '', '/'),
+		token: ops.uci_get('nikki-fleet.agent.token') ?? '',
+		router_id: ops.uci_get('nikki-fleet.agent.router_id') ?? '',
+		insecure: ops.uci_get('nikki-fleet.agent.insecure') == '1',
+		enabled: ops.uci_get('nikki-fleet.agent.enabled') == '1',
+	};
+}
+
+/* ---------- safety: auto-rollback if the panel becomes unreachable ---------- */
+
+const PENDING_WINDOW = 180;
+
+function set_pending(p) {
+	mkdir(P.state);
+	p.deadline = time() + PENDING_WINDOW;
+	writefile(P.pending, sprintf('%J', p));
+}
+
+function get_pending() {
+	const t = readfile(P.pending);
+	try { return t ? json(t) : null; } catch (e) { return null; }
+}
+
+function clear_pending() { unlink(P.pending); }
+
+// Returns an event to report if a rollback happened.
+function check_pending() {
+	const p = get_pending();
+	if (!p || time() < p.deadline)
+		return null;
+	clear_pending();
+	log(sprintf('panel unreachable after config change, restoring %s', p.backup));
+	const r = ops.restore_backup(p.kind, p.name, p.backup, true);
+	return { type: 'auto_rollback', ok: r.ok, profile: p.name, backup: p.backup,
+		message: 'Panel was unreachable for 3 minutes after the config change; previous version restored' };
+}
+
+/* ---------- command execution (whitelist) ---------- */
+
+const API_DENY = [ /^PUT \/configs/, /^POST \/restart/, /^POST \/upgrade/, /^POST \/configs\/geo/, /^DELETE \/configs/ ];
+
+function api_allowed(method, path) {
+	const key = uc(`${method}`) + ' ' + path;
+	for (let re in API_DENY)
+		if (match(key, re))
+			return false;
+	return true;
+}
+
+function a_kind(a) { return a?.kind == 'subscription' ? 'subscription' : 'file'; }
+
+const COMMANDS = {
+	'agent.ping': a => ({ pong: time() }),
+	'status': a => ops.status(!!a?.full),
+	'profiles.list': a => ({ active: ops.active_profile(), profiles: ops.list_profiles() }),
+	'profile.read': a => ops.read_profile(a_kind(a), a?.name),
+	'profile.test': a => ops.test_config(a?.content),
+	'profile.write': a => {
+		const r = ops.write_profile({ kind: a_kind(a), name: a?.name, content: a?.content,
+			activate: !!a?.activate, reload: a?.reload !== false });
+		if (r.ok && r.reloaded && r.backup)
+			set_pending({ kind: a_kind(a), name: a?.name, backup: r.backup });
+		return r;
+	},
+	'backups.list': a => ({ backups: ops.list_backups(a_kind(a), a?.name) }),
+	'backup.restore': a => ops.restore_backup(a_kind(a), a?.name, a?.id, a?.reload !== false),
+	'nikki.reload': a => { const r = ops.reload_nikki(); return { ok: r.code == 0, api: ops.wait_api(20) }; },
+	'subscription.update': a => ops.update_subscription(a?.section),
+	'logs.tail': a => ops.logs_tail(a?.which, a?.lines),
+	'mihomo.api': a => {
+		if (!api_allowed(a?.method ?? 'GET', `${a?.path}`))
+			return { ok: false, error: 'this API call is not allowed remotely' };
+		return ops.api(a?.method, a?.path, a?.body, 30);
+	},
+};
+
+function execute(cmd) {
+	const fn = COMMANDS[cmd?.type];
+	if (!fn)
+		return { id: cmd?.id, ok: false, error: 'unknown command: ' + cmd?.type };
+	try {
+		const data = fn(cmd.args ?? {});
+		const ok = type(data) == 'object' && exists(data, 'ok') ? !!data.ok : true;
+		return { id: cmd.id, ok: ok, data: data };
+	} catch (e) {
+		return { id: cmd.id, ok: false, error: `${e}` };
+	}
+}
+
+/* ---------- agent loop ---------- */
+
+function agent_run() {
+	let cfg = agent_cfg();
+	if (!cfg.server || !cfg.token)
+		die('agent is not enrolled: run  nikki-fleet enroll <panel-url> <code>');
+	log('agent started, panel ' + cfg.server);
+	let results = [], events = [], last_status = 0, backoff = 2, status_interval = 60;
+	const ev = check_pending();
+	if (ev) push(events, ev);
+
+	while (true) {
+		const send_status = time() - last_status >= status_interval;
+		const body = { agent_version: ops.VERSION, results: results, events: events,
+			status: send_status ? ops.status(true) : null };
+		const r = http('POST', cfg.server + '/api/agent/v1/poll', body, 75, cfg.token, cfg.insecure);
+		if (!r.ok) {
+			if (r.code == 401 || r.code == 410) {
+				log('panel rejected the token (router removed?), sleeping 10 min');
+				sleep(600 * 1000);
+				cfg = agent_cfg();
+			} else {
+				log(sprintf('poll failed (%s), retry in %ds', r.code ? 'HTTP ' + r.code : r.error, backoff));
+				const e = check_pending();
+				if (e) push(events, e);
+				sleep(backoff * 1000);
+				backoff = backoff < 30 ? backoff * 2 : 30;
+			}
+			continue;
+		}
+		backoff = 2;
+		results = [];
+		events = [];
+		if (send_status)
+			last_status = time();
+		if (get_pending())
+			clear_pending();   // panel reachable with the new config — keep it
+		status_interval = r.data?.status_interval ?? status_interval;
+		for (let cmd in (r.data?.commands ?? [])) {
+			push(results, execute(cmd));
+			if (cmd.type == 'status')
+				last_status = time();
+		}
+	}
+}
+
+function enroll(server, code, insecure) {
+	server = rtrim(server ?? '', '/');
+	if (!match(server, /^https?:\/\//) || !code)
+		die('usage: nikki-fleet enroll <https://panel> <code> [--insecure]');
+	const st = ops.status(false);
+	const r = http('POST', server + '/api/agent/v1/enroll',
+		{ code: code, info: { hostname: st.hostname, board: st.board, fleet_version: ops.VERSION, nikki: st.nikki } },
+		30, null, insecure);
+	if (!r.ok)
+		die('enrollment failed: ' + (r.data?.error ?? r.error ?? ('HTTP ' + r.code)));
+	ops.sh('touch ' + q((P.uci_conf ?? '/etc/config') + '/nikki-fleet'));
+	ops.sh((P.uci_conf ? 'uci -q -c ' + q(P.uci_conf) : 'uci -q') + ' set nikki-fleet.agent=agent');
+	ops.uci_set('nikki-fleet.agent.server', server);
+	ops.uci_set('nikki-fleet.agent.token', r.data.token);
+	ops.uci_set('nikki-fleet.agent.router_id', r.data.router_id);
+	ops.uci_set('nikki-fleet.agent.insecure', insecure ? '1' : '0');
+	ops.uci_set('nikki-fleet.agent.enabled', '1');
+	ops.uci_commit('nikki-fleet');
+	return r.data;
+}
+
+/* ---------- CLI ---------- */
+
+const USAGE = `nikki-fleet ${ops.VERSION}
+usage:
+  nikki-fleet status [--full]            router, Nikki and mihomo status (JSON)
+  nikki-fleet profiles                   list profiles and the active one
+  nikki-fleet read <name> [subscription] print a profile
+  nikki-fleet test <file>                check a config with mihomo -t
+  nikki-fleet write <name> <file> [--activate] [--no-reload]
+                                         safely write a profile (test, backup, reload, rollback)
+  nikki-fleet backups <name>             list backups of a profile
+  nikki-fleet restore <name> <backup-id> restore a backup
+  nikki-fleet api <METHOD> <path> [json] call the mihomo API
+  nikki-fleet enroll <panel-url> <code> [--insecure]
+                                         connect this router to a nikki-fleet panel
+  nikki-fleet unenroll                   disconnect from the panel
+  nikki-fleet agent                      run the agent (used by the service)
+  nikki-fleet watchdog                   restore the previous profile if a change was not confirmed
+`;
+
+const argv = ARGV;
+const has = f => index(argv, f) >= 0;
+const args = filter(argv, a => substr(a, 0, 2) != '--');
+
+switch (args[0]) {
+case 'status':
+	out(ops.status(has('--full')));
+	break;
+case 'profiles':
+	out({ active: ops.active_profile(), profiles: ops.list_profiles() });
+	break;
+case 'read': {
+	const r = ops.read_profile(args[2] == 'subscription' ? 'subscription' : 'file', args[1]);
+	if (!r.ok) die(r.error);
+	print(r.content);
+	break;
+}
+case 'test': {
+	const c = readfile(args[1] ?? '/dev/null');
+	const r = ops.test_config(c);
+	out(r);
+	exit(r.ok ? 0 : 2);
+}
+case 'write': {
+	const c = readfile(args[2] ?? '/dev/null');
+	const r = ops.write_profile({ kind: 'file', name: args[1], content: c, activate: has('--activate'), reload: !has('--no-reload') });
+	out(r);
+	exit(r.ok ? 0 : 2);
+}
+case 'backups':
+	out(ops.list_backups('file', args[1]));
+	break;
+case 'restore': {
+	const r = ops.restore_backup('file', args[1], args[2], true);
+	out(r);
+	exit(r.ok ? 0 : 2);
+}
+case 'api': {
+	const r = ops.api(args[1], args[2], args[3] ?? null);
+	out(r);
+	exit(r.ok ? 0 : 2);
+}
+case 'enroll': {
+	const d = enroll(args[1], args[2], has('--insecure'));
+	print('enrolled as router ' + d.router_id + '\n');
+	ops.sh('/etc/init.d/nikki-fleet enable; /etc/init.d/nikki-fleet restart');
+	break;
+}
+case 'unenroll':
+	ops.uci_set('nikki-fleet.agent.enabled', '0');
+	ops.uci_set('nikki-fleet.agent.token', '');
+	ops.uci_commit('nikki-fleet');
+	ops.sh('/etc/init.d/nikki-fleet stop; /etc/init.d/nikki-fleet disable');
+	print('disconnected from the panel\n');
+	break;
+case 'agent':
+	agent_run();
+	break;
+case 'watchdog': {
+	const e = check_pending();
+	out(e ?? { pending: get_pending() });
+	break;
+}
+case 'version':
+	print(ops.VERSION + '\n');
+	break;
+default:
+	print(USAGE);
+	exit(args[0] ? 1 : 0);
+}

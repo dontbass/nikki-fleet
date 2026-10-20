@@ -1,0 +1,17 @@
+{
+	"luci-app-nikki-fleet": {
+		"description": "Grant access to the Nikki configurator and remote management",
+		"read": {
+			"ubus": {
+				"luci.nikki-fleet": [ "profiles", "read", "test", "backups", "status", "agent_status" ]
+			},
+			"uci": [ "nikki-fleet" ]
+		},
+		"write": {
+			"ubus": {
+				"luci.nikki-fleet": [ "write", "restore", "api", "agent_enroll", "agent_unenroll" ]
+			},
+			"uci": [ "nikki-fleet" ]
+		}
+	}
+}

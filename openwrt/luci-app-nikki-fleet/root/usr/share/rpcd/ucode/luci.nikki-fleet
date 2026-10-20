@@ -1,0 +1,95 @@
+#!/usr/bin/ucode
+// SPDX-License-Identifier: GPL-3.0-or-later
+// rpcd plugin for luci-app-nikki-fleet. All logic lives in nikki_fleet.ops
+// (shared with the remote agent); arguments are validated there.
+'use strict';
+
+import * as ops from '/usr/share/ucode/nikki_fleet/ops.uc';
+
+function kind(k) { return k == 'subscription' ? 'subscription' : 'file'; }
+
+const methods = {
+	profiles: {
+		call: function() {
+			return { active: ops.active_profile(), profiles: ops.list_profiles() };
+		}
+	},
+	read: {
+		args: { kind: 'kind', name: 'name' },
+		call: function(req) {
+			return ops.read_profile(kind(req.args?.kind), req.args?.name);
+		}
+	},
+	test: {
+		args: { content: 'content' },
+		call: function(req) {
+			return ops.test_config(req.args?.content);
+		}
+	},
+	write: {
+		args: { kind: 'kind', name: 'name', content: 'content', activate: false, reload: true },
+		call: function(req) {
+			const a = req.args ?? {};
+			// shorter wait keeps the call inside the LuCI/rpcd request timeout
+			return ops.write_profile({ kind: kind(a.kind), name: a.name, content: a.content,
+				activate: !!a.activate, reload: a.reload !== false, wait: 12 });
+		}
+	},
+	backups: {
+		args: { kind: 'kind', name: 'name' },
+		call: function(req) {
+			return { backups: ops.list_backups(kind(req.args?.kind), req.args?.name) };
+		}
+	},
+	restore: {
+		args: { kind: 'kind', name: 'name', id: 'id' },
+		call: function(req) {
+			return ops.restore_backup(kind(req.args?.kind), req.args?.name, req.args?.id, true);
+		}
+	},
+	api: {
+		args: { method: 'method', path: 'path', body: 'body' },
+		call: function(req) {
+			const a = req.args ?? {};
+			return ops.api(a.method, a.path, (a.body != null && a.body !== '') ? a.body : null, 20);
+		}
+	},
+	status: {
+		call: function() {
+			return ops.status(true);
+		}
+	},
+	agent_status: {
+		call: function() {
+			const g = k => ops.uci_get('nikki-fleet.agent.' + k) ?? '';
+			return {
+				enrolled: g('token') != '' && g('server') != '',
+				enabled: g('enabled') == '1',
+				server: g('server'),
+				router_id: g('router_id'),
+				running: ops.sh('pgrep -f "nikki-fleet agent"').code == 0,
+				version: ops.VERSION,
+			};
+		}
+	},
+	agent_enroll: {
+		args: { server: 'server', code: 'code', insecure: false },
+		call: function(req) {
+			const a = req.args ?? {};
+			if (!match(`${a.server}`, /^https?:\/\/[^ '"]+$/))
+				return { ok: false, error: 'invalid panel URL' };
+			if (!match(`${a.code}`, /^[A-Za-z0-9-]{4,32}$/))
+				return { ok: false, error: 'invalid code' };
+			const r = ops.sh('/usr/bin/nikki-fleet enroll ' + ops.q(a.server) + ' ' + ops.q(a.code) + (a.insecure ? ' --insecure' : ''));
+			return { ok: r.code == 0, output: trim(r.out) };
+		}
+	},
+	agent_unenroll: {
+		call: function() {
+			const r = ops.sh('/usr/bin/nikki-fleet unenroll');
+			return { ok: r.code == 0, output: trim(r.out) };
+		}
+	},
+};
+
+return { 'luci.nikki-fleet': methods };
