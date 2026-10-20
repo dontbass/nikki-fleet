@@ -313,7 +313,8 @@ func (a *App) createEnrollCode(w http.ResponseWriter, r *http.Request, u *User) 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"code":    code,
 		"expires": exp,
-		"command": "curl -fsSL " + base + "/install.sh | sh -s -- " + code,
+		"command": "wget -qO- " + base + "/install.sh | sh -s -- " + code,
+		"curl":    "curl -fsSL " + base + "/install.sh | sh -s -- " + code,
 		"manual":  "nikki-fleet enroll " + base + " " + code,
 	})
 }
@@ -332,10 +333,11 @@ var cmdNeed = map[string]string{
 	"profile.write":       "editor",
 	"backup.restore":      "editor",
 	"nikki.reload":        "editor",
+	"nikki.enable":        "editor",
 	"subscription.update": "editor",
 }
 
-var slowCmds = map[string]bool{"profile.write": true, "backup.restore": true, "nikki.reload": true, "subscription.update": true}
+var slowCmds = map[string]bool{"profile.write": true, "backup.restore": true, "nikki.reload": true, "nikki.enable": true, "subscription.update": true}
 
 func (a *App) routerCmd(w http.ResponseWriter, r *http.Request, u *User) {
 	var req struct {

@@ -132,9 +132,8 @@ async function renderFleet(){
       <div class="panel empty">
         <h2>Подключите первый роутер</h2>
         <ol>
-          <li>Установите на роутер <a href="https://github.com/nikkinikki-org/OpenWrt-nikki" target="_blank" rel="noopener">Nikki</a> (OpenWrt 24.10 или 25.12).</li>
           <li>Нажмите «Подключить роутер» и скопируйте команду.</li>
-          <li>Выполните её в SSH на роутере — он появится здесь через несколько секунд.</li>
+          <li>Выполните её в SSH на роутере с OpenWrt 24.10 или 25.12. Если <a href="https://github.com/nikkinikki-org/OpenWrt-nikki" target="_blank" rel="noopener">Nikki</a> ещё нет, команда установит и его. Роутер появится здесь через несколько секунд.</li>
         </ol>
         <button class="primary" id="addRouter2">Подключить роутер</button>
       </div>`}`;
@@ -154,12 +153,13 @@ function addRouterDialog(){
       let c; try{ c = await post("/api/routers/enroll", {name:$("#rn").value.trim()}); }catch(e){ return flash(e.message, true); }
       const before = new Set(S.routers.map(r => r.id));
       body.innerHTML = `<h2>Выполните на роутере</h2>
-        <div class="small muted">Подключитесь к роутеру по SSH (<code>ssh root@192.168.1.1</code>) и выполните команду. Она установит пакеты nikki-fleet и подключит роутер к этой панели.</div>
+        <div class="small muted">Подключитесь к роутеру по SSH (<code>ssh root@192.168.1.1</code>) и выполните команду. Если Nikki ещё не установлен, она сначала поставит официальный Nikki, затем nikki-fleet, и подключит роутер к этой панели. Подходит для OpenWrt 24.10 и 25.12.</div>
         <div class="cmd"><code id="cmdText">${esc(c.command)}</code><button id="cp1">Копировать</button></div>
+        <details><summary class="small">Через curl</summary><div class="cmd" style="margin-top:8px"><code>${esc(c.curl)}</code><button id="cp3">Копировать</button></div></details>
         <details><summary class="small">Пакеты уже установлены</summary><div class="cmd" style="margin-top:8px"><code>${esc(c.manual)}</code><button id="cp2">Копировать</button></div></details>
         <div class="note">Код <b class="mono">${esc(c.code)}</b> одноразовый и действует 30 минут. <span id="wait">Жду подключения роутера…</span></div>
         <div class="row end"><button data-close>Закрыть</button></div>`;
-      $("#cp1").onclick = () => copy(c.command); $("#cp2").onclick = () => copy(c.manual);
+      $("#cp1").onclick = () => copy(c.command); $("#cp2").onclick = () => copy(c.manual); $("#cp3").onclick = () => copy(c.curl);
       dlg._timer = setInterval(async () => {
         try{
           const rs = await get("/api/routers"); const n = rs.find(r => !before.has(r.id));
@@ -215,7 +215,7 @@ function drawOverview(){
     </div>
     <div class="panel">
       <div class="spread"><h3>Nikki и mihomo</h3>
-        ${canEdit() && r.online ? `<div class="row"><button id="aReload">Перезапустить Nikki</button><button id="aUpdSubs">Обновить подписки</button></div>` : ""}</div>
+        ${canEdit() && r.online ? `<div class="row">${nk.enabled===false ? `<button class="primary" id="aEnable">Включить Nikki</button>` : `<button id="aReload">Перезапустить Nikki</button><button id="aUpdSubs">Обновить подписки</button><button class="ghost danger" id="aDisable">Выключить</button>`}</div>` : ""}</div>
       <div class="kv">
         <div><b>Nikki</b><span>${nk.running ? `<span class="ok">работает</span>` : st.nikki ? `<span class="err">остановлен</span>` : "—"}${nk.enabled===false ? " · выключен в настройках" : ""}</span></div>
         <div><b>Версия Nikki</b><span>${esc(nk.version || "—")}</span></div>
@@ -244,6 +244,19 @@ function drawOverview(){
     catch(err){ flash(err.message, true); }
     b.disabled = false; b.textContent = "Перезапустить Nikki";
   });
+  const toggle = async (e, on) => {
+    const b = e.currentTarget;
+    if(!on && !b.dataset.armed){ b.dataset.armed = "1"; b.textContent = "Точно выключить прокси?"; setTimeout(()=>{ if(b.isConnected){ delete b.dataset.armed; b.textContent = "Выключить"; } }, 4000); return; }
+    b.disabled = true; b.textContent = on ? "Включаю…" : "Выключаю…";
+    try{
+      const d = await cmd(S.router.id, "nikki.enable", {enabled: on});
+      flash(d.ok ? (on ? "Nikki включён, mihomo работает" : "Nikki выключен") : (d.error || "Ошибка"), !d.ok);
+      if(d.ok){ const st2 = await cmd(S.router.id, "status", {full:true}).catch(()=>null); if(st2){ S.router.status = st2; drawOverview(); } }
+    }catch(err){ flash(err.message, true); }
+    if(b.isConnected){ b.disabled = false; b.textContent = on ? "Включить Nikki" : "Выключить"; }
+  };
+  $("#aEnable")?.addEventListener("click", e => toggle(e, true));
+  $("#aDisable")?.addEventListener("click", e => toggle(e, false));
   $("#aUpdSubs")?.addEventListener("click", async e => {
     const b = e.currentTarget; b.disabled = true; b.textContent = "Обновляю…";
     const names = (st.providers || []).map(p => p.name); let bad = 0;

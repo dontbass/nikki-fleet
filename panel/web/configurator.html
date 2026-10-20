@@ -1089,7 +1089,7 @@ function mihomoErrors(out){
 }
 function hostResultText(r){
   if(!r) return "";
-  if(r.ok) return r.reloaded ? "Сохранено и применено: Nikki перезапущен, mihomo работает" : (r.stage==="written" ? "Сохранено. Профиль не активен — перезапуск не нужен" : "Сохранено");
+  if(r.ok) return r.reloaded ? (r.enabled ? "Сохранено и применено: Nikki включён, mihomo работает" : "Сохранено и применено: Nikki перезапущен, mihomo работает") : r.nikki_disabled ? "Сохранено. Nikki выключен — включите его, чтобы применить профиль" : (r.stage==="written" ? "Сохранено. Профиль не активен — перезапуск не нужен" : "Сохранено");
   if(r.stage==="test") return "mihomo не принял конфиг, на роутере ничего не изменилось:\n" + mihomoErrors(r.output);
   if(r.rolled_back) return "mihomo не запустился с новым конфигом — вернул предыдущую версию" + (r.recovered===false ? " (внимание: mihomo не отвечает и после отката)" : "") + (r.log ? "\n" + mihomoErrors(r.log) : "");
   return r.error || "Ошибка";

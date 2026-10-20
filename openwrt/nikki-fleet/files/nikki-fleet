@@ -106,6 +106,7 @@ const COMMANDS = {
 	},
 	'backups.list': a => ({ backups: ops.list_backups(a_kind(a), a?.name) }),
 	'backup.restore': a => ops.restore_backup(a_kind(a), a?.name, a?.id, a?.reload !== false),
+	'nikki.enable': a => ops.set_enabled(a?.enabled !== false),
 	'nikki.reload': a => { const r = ops.reload_nikki(); return { ok: r.code == 0, api: ops.wait_api(20) }; },
 	'subscription.update': a => ops.update_subscription(a?.section),
 	'logs.tail': a => ops.logs_tail(a?.which, a?.lines),
@@ -208,6 +209,7 @@ usage:
                                          safely write a profile (test, backup, reload, rollback)
   nikki-fleet backups <name>             list backups of a profile
   nikki-fleet restore <name> <backup-id> restore a backup
+  nikki-fleet enable | disable           turn Nikki on (with a health check) or off
   nikki-fleet api <METHOD> <path> [json] call the mihomo API
   nikki-fleet enroll <panel-url> <code> [--insecure]
                                          connect this router to a nikki-fleet panel
@@ -248,6 +250,12 @@ case 'write': {
 case 'backups':
 	out(ops.list_backups('file', args[1]));
 	break;
+case 'enable':
+case 'disable': {
+	const r = ops.set_enabled(args[0] == 'enable');
+	out(r);
+	exit(r.ok ? 0 : 2);
+}
 case 'restore': {
 	const r = ops.restore_backup('file', args[1], args[2], true);
 	out(r);

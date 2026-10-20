@@ -45,13 +45,21 @@
 
 ## Установка
 
-### Пакеты на роутер
+### На роутер — одной командой
 
-Нужен OpenWrt **24.10** (opkg) или **25.12** (apk) с установленным Nikki. Пакеты не зависят от архитектуры.
+Нужен OpenWrt **24.10** или **25.12** с firewall4. По SSH на роутере:
 
-Проще всего — командой из панели (кнопка «Подключить роутер»): она установит пакеты и сразу подключит роутер.
+```sh
+wget -qO- https://raw.githubusercontent.com/dontbass/nikki-fleet/main/install.sh | sh
+```
 
-Вручную — скачайте `.ipk` (24.10) или `.apk` (25.12) со страницы [Releases](https://github.com/dontbass/nikki-fleet/releases) и установите:
+Если Nikki ещё не установлен, скрипт сначала поставит **официальный Nikki** его же скриптами (`feed.sh` и `install.sh` из [nikkinikki-org/OpenWrt-nikki](https://github.com/nikkinikki-org/OpenWrt-nikki)): репозиторий Nikki подключится к opkg/apk, и Nikki будет обновляться штатно. Затем ставятся пакеты nikki-fleet. Сам Nikki при этом не меняется — nikki-fleet ставится рядом как дополнение. Пропустить установку Nikki: `NIKKI=0`.
+
+Свежий Nikki после установки выключен. Он включится, когда вы сохраните первый профиль в конфигураторе («Сохранить как новый профиль»), или вручную: `nikki-fleet enable` (с проверкой — если mihomo не запустится, Nikki снова выключится).
+
+Из панели та же команда идёт с кодом и сразу подключает роутер: `wget -qO- https://ваша-панель/install.sh | sh -s -- КОД`.
+
+Вручную — скачайте `.ipk` (24.10) или `.apk` (25.12) со страницы [Releases](https://github.com/dontbass/nikki-fleet/releases):
 
 ```sh
 # OpenWrt 24.10
@@ -86,7 +94,7 @@ docker compose up -d
 ### Подключить роутер
 
 1. В панели: **Подключить роутер** → скопируйте команду.
-2. На роутере по SSH: `curl -fsSL https://ваша-панель/install.sh | sh -s -- КОД`
+2. На роутере по SSH: `wget -qO- https://ваша-панель/install.sh | sh -s -- КОД` — поставит Nikki (если его нет), nikki-fleet и подключит роутер.
 
 Или в LuCI: **Nikki → Удалённое управление** → адрес панели и код. Или в консоли: `nikki-fleet enroll https://ваша-панель КОД`.
 
@@ -99,6 +107,7 @@ nikki-fleet test config.yaml         проверить конфиг mihomo -t
 nikki-fleet write main.yaml new.yaml безопасно записать профиль (проверка, копия, перезапуск, откат)
 nikki-fleet backups main.yaml        резервные копии профиля
 nikki-fleet restore main.yaml <id>   восстановить копию
+nikki-fleet enable | disable         включить Nikki (с проверкой) или выключить
 nikki-fleet enroll <url> <код>       подключить к панели
 nikki-fleet unenroll                 отключить от панели
 ```

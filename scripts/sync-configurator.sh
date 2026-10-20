@@ -10,3 +10,5 @@ for DST in panel/web openwrt/luci-app-nikki-fleet/htdocs/luci-static/resources/n
 	cp "$SRC/js-yaml.min.js" "$DST/js-yaml.min.js"
 done
 echo "configurator synced"
+cp install.sh panel/install.sh.tmpl
+echo "install.sh synced"

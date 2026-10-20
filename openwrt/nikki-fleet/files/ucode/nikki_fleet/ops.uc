@@ -5,7 +5,7 @@
 
 import { readfile, writefile, popen, stat, lsdir, mkdir, unlink, rename } from 'fs';
 
-export const VERSION = '0.1.1';
+export const VERSION = '0.1.2';
 
 // NF_ROOT lets tests run against a fake filesystem root.
 const ROOT = getenv('NF_ROOT') ?? '';
@@ -306,21 +306,62 @@ export function write_profile(opts) {
 	if (!opts.reload || !is_active)
 		return { ok: true, stage: 'written', backup: bk, activated: activated, reloaded: false };
 
+	// A freshly installed Nikki is disabled. Making a profile active turns it
+	// on; plain edits of a disabled Nikki are saved without starting it.
+	let turned_on = false;
+	if (uci_get('nikki.config.enabled') != '1') {
+		if (!(opts.enable ?? opts.activate))
+			return { ok: true, stage: 'written', backup: bk, activated: activated, reloaded: false, nikki_disabled: true };
+		uci_set('nikki.config.enabled', '1');
+		uci_commit('nikki');
+		turned_on = true;
+	}
+
 	reload_nikki();
 	if (wait_api(opts.wait ?? 25))
-		return { ok: true, stage: 'reloaded', backup: bk, activated: activated, reloaded: true };
+		return { ok: true, stage: 'reloaded', backup: bk, activated: activated, reloaded: true, enabled: turned_on };
 
 	// rollback
 	if (bk)
 		writefile(path, readfile(P.backups + '/' + bk));
+	else if (activated)
+		unlink(path);
 	if (activated && act.kind) {
 		uci_set('nikki.config.profile', act.kind + ':' + act.name);
 		uci_commit('nikki');
 	}
+	if (turned_on) {
+		uci_set('nikki.config.enabled', '0');
+		uci_commit('nikki');
+	}
+	const log = logs_tail('core', 30).content;
 	reload_nikki();
-	const back = wait_api(opts.wait ?? 25);
+	const back = turned_on ? true : wait_api(opts.wait ?? 25);
 	return { ok: false, stage: 'reload', error: 'mihomo did not start with the new config, previous version restored',
-		rolled_back: true, recovered: back, backup: bk, log: logs_tail('core', 30).content };
+		rolled_back: true, recovered: back, backup: bk, log: log };
+}
+
+// Turn Nikki on (with a health check; turned back off if mihomo does not start) or off.
+export function set_enabled(on) {
+	if (!on) {
+		uci_set('nikki.config.enabled', '0');
+		uci_commit('nikki');
+		sh(q(P.init) + ' stop');
+		return { ok: true, enabled: false };
+	}
+	const act = active_profile();
+	if (!act.kind || !act.path || !stat(act.path))
+		return { ok: false, error: 'no active profile: save a profile first' };
+	uci_set('nikki.config.enabled', '1');
+	uci_commit('nikki');
+	reload_nikki();
+	if (wait_api(25))
+		return { ok: true, enabled: true };
+	const log = logs_tail('core', 30).content;
+	uci_set('nikki.config.enabled', '0');
+	uci_commit('nikki');
+	sh(q(P.init) + ' stop');
+	return { ok: false, error: 'mihomo did not start, Nikki turned off again', log: log };
 }
 
 export function restore_backup(kind, name, id, reload) {
