@@ -2,7 +2,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=nikki-fleet
-PKG_VERSION:=0.1.8
+PKG_VERSION:=0.1.9
 PKG_RELEASE:=1
 
 PKG_LICENSE:=GPL-3.0-or-later
@@ -45,7 +45,13 @@ endef
 
 define Package/nikki-fleet/postinst
 #!/bin/sh
-[ -n "$${IPKG_INSTROOT}" ] || /etc/init.d/nikki-fleet restart >/dev/null 2>&1
+[ -n "$${IPKG_INSTROOT}" ] && exit 0
+# an upgrade runs the old prerm (stop + disable): restore autostart for an enrolled agent
+if [ "$$(uci -q get nikki-fleet.agent.enabled)" = 1 ] && [ -n "$$(uci -q get nikki-fleet.agent.token)" ]; then
+	/etc/init.d/nikki-fleet enable
+fi
+/etc/init.d/nikki-fleet restart >/dev/null 2>&1
+rm -f /etc/config/nikki-fleet-opkg
 exit 0
 endef
 
