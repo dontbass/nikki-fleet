@@ -11,26 +11,28 @@
 <style>
 /* Layout: tabbed editor (subscriptions / rules / groups) on the left, live YAML + problems on the right; stacks on phones */
 :root{
-  --bg:#f3f5f7; --panel:#ffffff; --fg:#17202a; --muted:#5c6b7a; --line:#d9dfe6;
-  --accent:#2f5d8a; --accent-ink:#ffffff; --soft:#e7eef5; --warn:#a4471c; --ok:#2d7a4b;
-  --code-bg:#0f1720; --code-fg:#d6e2ee;
-  --c-direct:#2d7a4b; --c-reject:#b23a3a;
-  --c1:#2f5d8a; --c2:#9a6420; --c3:#6b4a8f; --c4:#23808a; --c5:#a03a6c; --c6:#5f6f12;
-  --f-ui:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
-  --f-mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Consolas,monospace;
+  --bg:#f4f5fb; --panel:#ffffff; --fg:#2d2f55; --muted:#67748e; --line:#e1e5f0;
+  --accent:#5e72e4; --accent-ink:#ffffff; --soft:#eef0fd; --warn:#d6294f; --ok:#1a9b67;
+  --code-bg:#171a35; --code-fg:#dfe3fb;
+  --c-direct:#1a9b67; --c-reject:#d6294f;
+  --c1:#5e72e4; --c2:#9a6420; --c3:#6b4a8f; --c4:#23808a; --c5:#a03a6c; --c6:#5f6f12;
+  --f-ui:"Twemoji Country Flags","IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"Twemoji Country Flags","JetBrains Mono",ui-monospace,"SFMono-Regular",Consolas,monospace;
 }
+/* Windows has no flag emoji: a flags-only font (Twemoji, CC-BY 4.0) next to this file */
+@font-face{font-family:"Twemoji Country Flags";src:url(flags.woff2) format("woff2");unicode-range:U+1F1E6-1F1FF,U+1F3F4,U+E0062-E0063,U+E0065,U+E0067,U+E006C,U+E006E,U+E0073-E0074,U+E0077,U+E007F;font-display:swap}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#0e141a; --panel:#151d26; --fg:#e3eaf1; --muted:#8fa0b1; --line:#26323e;
-  --accent:#6fa3d6; --accent-ink:#0b1219; --soft:#1c2834; --warn:#e08a5f; --ok:#6cc08f;
-  --code-bg:#0a0f14; --code-fg:#cfdbe7;
-  --c-direct:#5fbf86; --c-reject:#e06a6a;
-  --c1:#6fa3d6; --c2:#d9a35a; --c3:#a88bd0; --c4:#5cc0c9; --c5:#d97aa6; --c6:#b5c45a; color-scheme:dark}}
+  --bg:#12142a; --panel:#1c1f3a; --fg:#e8eaf6; --muted:#9aa3c7; --line:#2e3260;
+  --accent:#8a9bff; --accent-ink:#11132a; --soft:#262a50; --warn:#ff7a93; --ok:#4fd6a0;
+  --code-bg:#0c0e20; --code-fg:#dfe3fb;
+  --c-direct:#4fd6a0; --c-reject:#ff7a93;
+  --c1:#8a9bff; --c2:#d9a35a; --c3:#a88bd0; --c4:#5cc0c9; --c5:#d97aa6; --c6:#b5c45a; color-scheme:dark}}
 :root[data-theme="dark"]{
-  --bg:#0e141a; --panel:#151d26; --fg:#e3eaf1; --muted:#8fa0b1; --line:#26323e;
-  --accent:#6fa3d6; --accent-ink:#0b1219; --soft:#1c2834; --warn:#e08a5f; --ok:#6cc08f;
-  --code-bg:#0a0f14; --code-fg:#cfdbe7;
-  --c-direct:#5fbf86; --c-reject:#e06a6a;
-  --c1:#6fa3d6; --c2:#d9a35a; --c3:#a88bd0; --c4:#5cc0c9; --c5:#d97aa6; --c6:#b5c45a; color-scheme:dark}
+  --bg:#12142a; --panel:#1c1f3a; --fg:#e8eaf6; --muted:#9aa3c7; --line:#2e3260;
+  --accent:#8a9bff; --accent-ink:#11132a; --soft:#262a50; --warn:#ff7a93; --ok:#4fd6a0;
+  --code-bg:#0c0e20; --code-fg:#dfe3fb;
+  --c-direct:#4fd6a0; --c-reject:#ff7a93;
+  --c1:#8a9bff; --c2:#d9a35a; --c3:#a88bd0; --c4:#5cc0c9; --c5:#d97aa6; --c6:#b5c45a; color-scheme:dark}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 body{background:var(--bg);color:var(--fg);font-family:var(--f-ui);font-size:14px;line-height:1.45;padding-inline:16px;padding-block:20px 40px}

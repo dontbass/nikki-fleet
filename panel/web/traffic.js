@@ -113,7 +113,7 @@ function tabTraffic(body, r){
     const maxS = Math.max(...groups.map(g => g.dn+g.up)), maxT = Math.max(...groups.map(g => g.total));
     el.innerHTML = groups.map(g => { const w = maxS > 0 ? (g.dn+g.up)/maxS : g.total/(maxT||1);
       return `<button class="tritem" data-trf="${esc(g.key)}" title="Показать соединения">
-        <span class="trname">${esc(g.label)}</span><span class="trval">${maxS > 0 ? speed(g.dn+g.up) : bytes(g.total)}</span>
+        <span class="trname">${g.html ? fname(g.label) : esc(g.label)}</span><span class="trval">${maxS > 0 ? speed(g.dn+g.up) : bytes(g.total)}</span>
         <span class="bar"><i style="width:${Math.max(2, Math.round(w*100))}%"></i></span>
         <span class="small muted">${g.n} соед. · ${bytes(g.total)}</span></button>`; }).join("");
   }
@@ -124,7 +124,7 @@ function tabTraffic(body, r){
     const x = i => (W * (n - (h.length - 1 - i)) / n).toFixed(1), y = v => (H - 4 - (H - 8) * v / max).toFixed(1);
     const line = k => h.map((p,i) => `${i ? "L" : "M"}${x(i)},${y(p[k])}`).join("");
     el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
-      <line x1="0" x2="${W}" y1="${y(max)}" y2="${y(max)}" class="grid"/><line x1="0" x2="${W}" y1="${y(max/2)}" y2="${y(max/2)}" class="grid"/>
+      <line x1="0" x2="${W}" y1="${y(max)}" y2="${y(max)}" class="gl"/><line x1="0" x2="${W}" y1="${y(max/2)}" y2="${y(max/2)}" class="gl"/>
       <path d="${line("dn")}L${x(h.length-1)},${H}L${x(0)},${H}Z" class="area dn"/><path d="${line("dn")}" class="ln dn"/><path d="${line("up")}" class="ln up"/></svg>
       <span class="trmax small muted">${speed(max)}</span><span class="trlegend small"><i class="dn"></i>загрузка <i class="up"></i>отдача · 3 мин</span>`;
   }
@@ -141,7 +141,7 @@ function tabTraffic(body, r){
     $("#trCnt").textContent = d.count;
     $("#trTot").textContent = `↓ ${bytes(d.down_total)} · ↑ ${bytes(d.up_total)}`;
     drawChart();
-    drawList($("#trByNode"), group(d.conns, trNode));
+    drawList($("#trByNode"), group(d.conns, trNode).map(g => ({...g, html:true})));
     drawList($("#trByDev"), group(d.conns, c => c.src || "—", c => trDev(T, c.src)));
     drawList($("#trByRule"), group(d.conns, trRule));
 
@@ -159,7 +159,7 @@ function tabTraffic(body, r){
           <div class="small muted">${esc((c.net||"").toUpperCase())}${c.type ? " · " + esc(c.type) : ""}${c.host && c.dst ? " · " + esc(c.dst) : ""}${c.proc ? " · " + esc(c.proc) : ""}</div></td>
         <td class="c-dev">${esc(trDev(T, c.src))}${T.leases[c.src] ? `<div class="small muted">${esc(c.src)}</div>` : ""}</td>
         <td class="small c-rule">${esc(trRule(c))}</td>
-        <td class="c-route"><span class="route${direct ? " direct" : ""}">${esc(trRoute(c))}</span></td>
+        <td class="c-route"><span class="route${direct ? " direct" : ""}">${(c.chain || []).slice().reverse().map(fname).join(" → ") || "—"}</span></td>
         <td class="num c-speed">${s.dn || s.up ? `${speed(s.dn)}<div class="small muted">${speed(s.up)}</div>` : `<span class="muted">—</span>`}</td>
         <td class="num c-total">${bytes(c.down + c.up)}</td>
         <td class="num muted c-age">${trAge(c.start)}</td>

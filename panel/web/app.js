@@ -91,6 +91,40 @@ function updateDialog(r){
 function clearTimers(){ S.timers.forEach(clearInterval); S.timers = []; }
 function every(ms, fn){ S.timers.push(setInterval(fn, ms)); }
 
+/* ---------- icons ---------- */
+const IC = {
+  power:'<path d="M12 3v8"/><path d="M6.4 6.4a8 8 0 1 0 11.2 0"/>',
+  globe:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/>',
+  swap:'<path d="M7 4v14M7 18l-3-3M7 18l3-3M17 20V6M17 6l-3 3M17 6l3 3"/>',
+  chip:'<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>',
+  router:'<rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 16.5h.01M11 16.5h.01M8 9.5a5.5 5.5 0 0 1 8 0M5.5 7a9 9 0 0 1 13 0"/>',
+  on:'<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  off:'<path d="M12 8v5M12 16.5h.01"/><circle cx="12" cy="12" r="9"/>',
+  up:'<path d="M12 19V5M5 12l7-7 7 7"/>',
+  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  moon:'<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
+  auto:'<circle cx="12" cy="12" r="9"/><path d="M12 3v18" /><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/>',
+};
+const icon = (k, cls) => `<svg viewBox="0 0 24 24" aria-hidden="true" class="${cls||""}">${IC[k]}</svg>`;
+function stat(label, value, detail, ic, grad){
+  return `<div class="stat"><b>${label}</b><span class="v">${value}</span><span class="ic ${grad}">${icon(ic)}</span>${detail != null ? `<span class="d">${detail}</span>` : ""}</div>`;
+}
+
+/* ---------- theme: auto / light / dark ---------- */
+function themeGet(){ try{ return localStorage.getItem("nf.theme") || "auto"; }catch(e){ return "auto"; } }
+function themeApply(t){
+  const el = document.documentElement;
+  if(t === "light" || t === "dark") el.dataset.theme = t; else delete el.dataset.theme;
+  const f = document.querySelector("iframe.frame");
+  try{ if(f?.contentDocument){ const r = f.contentDocument.documentElement; if(el.dataset.theme) r.dataset.theme = el.dataset.theme; else delete r.dataset.theme; } }catch(e){}
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("#themeBtn"); if(!b) return;
+  const order = ["auto","light","dark"], t = order[(order.indexOf(themeGet()) + 1) % 3];
+  try{ localStorage.setItem("nf.theme", t); }catch(err){}
+  themeApply(t); renderNav();
+});
+
 /* ---------- dialog ---------- */
 const dlg = $("#dlg");
 function openDialog(html, onMount){ $("#dlgBody").innerHTML = html; dlg.showModal(); onMount && onMount($("#dlgBody")); }
@@ -106,7 +140,8 @@ async function copy(text){
 function renderNav(){
   const n = $("#topnav");
   if(!S.me){ n.innerHTML = ""; return; }
-  n.innerHTML = `<a class="btn ghost" href="#/account">${esc(S.me.username)}${S.me.is_admin ? " · админ" : ""}</a><button class="ghost" id="logout">Выйти</button>`;
+  const t = themeGet(), tl = {auto:"Тема: как в системе", light:"Тема: светлая", dark:"Тема: тёмная"}[t];
+  n.innerHTML = `<button class="ghost" id="themeBtn" title="${tl}" aria-label="${tl}">${icon(t==="auto" ? "auto" : t==="light" ? "sun" : "moon", "ti")}</button><a class="btn ghost" href="#/account">${esc(S.me.username)}${S.me.is_admin ? " · админ" : ""}</a><button class="ghost" id="logout">Выйти</button>`;
 }
 document.addEventListener("click", async e => {
   if(e.target.closest("#logout")){ await post("/api/auth/logout"); S.me = null; location.hash = "#/"; boot(); }
@@ -143,7 +178,7 @@ function renderAuth(){
 function routerCard(r){
   const st = statusOf(r), b = st.board || {}, nk = st.nikki || {};
   const subs = (st.providers || []).filter(p => p.sub || p.count).slice(0, 4);
-  return `<a class="card" href="#/r/${r.id}">
+  return `<a class="card ${r.online ? "on" : "off"}" href="#/r/${r.id}">
     <div class="spread"><span class="name">${esc(r.name)}</span>${r.online ? `<span class="pill on">в сети</span>` : `<span class="pill off">не в сети · ${ago(r.last_seen)}</span>`}</div>
     <div class="meta">
       ${b.model ? `<span>${esc(b.model)}</span>` : ""}${b.release ? `<span>OpenWrt ${esc(b.release)}</span>` : ""}
@@ -158,7 +193,7 @@ function routerCard(r){
     </div>
     ${subs.length ? `<div class="subs">${subs.map(p => {
       const used = p.sub ? (p.sub.Upload||0)+(p.sub.Download||0) : 0, pct = p.sub?.Total ? Math.min(100, used/p.sub.Total*100) : 0;
-      return `<div class="s"><span>${esc(p.name)} <span class="muted">${p.alive}/${p.count}</span></span><span>${esc(subLine(p.sub))}</span></div>${p.sub?.Total ? `<div class="bar"><i class="${pct>85?"hi":""}" style="width:${pct.toFixed(1)}%"></i></div>` : ""}`;
+      return `<div class="s"><span>${fname(p.name)} <span class="muted">${p.alive}/${p.count}</span></span><span>${esc(subLine(p.sub))}</span></div>${p.sub?.Total ? `<div class="bar"><i class="${pct>85?"hi":""}" style="width:${pct.toFixed(1)}%"></i></div>` : ""}`;
     }).join("")}</div>` : ""}
   </a>`;
 }
@@ -167,8 +202,14 @@ async function renderFleet(){
   const draw = () => {
     const rs = S.routers, on = rs.filter(r => r.online).length;
     app.innerHTML = `
-      <div class="spread"><div><h1>Роутеры</h1><div class="muted small">${rs.length ? `${rs.length} всего · ${on} в сети` : ""}</div></div>
+      <div class="pagehead"><div><h1>Роутеры</h1><div class="muted small">Nikki + mihomo под управлением nikki-fleet</div></div>
         <button class="primary" id="addRouter">+ Подключить роутер</button></div>
+      ${rs.length ? `<div class="fleetstats">
+        ${stat("Роутеров", rs.length, "всего в панели", "router", "g-main")}
+        ${stat("В сети", on, on === rs.length ? "все на связи" : "", "on", "g-ok")}
+        ${stat("Не в сети", rs.length - on, rs.length - on ? "агент не подключён" : "нет таких", "off", rs.length - on ? "g-warn" : "g-info")}
+        ${stat("Обновления", rs.filter(needsUpdate).length, S.latest ? `последняя ${esc(S.latest)}` : "", "up", rs.some(needsUpdate) ? "g-amber" : "g-info")}
+      </div>` : ""}
       ${rs.length ? `<div class="grid">${rs.map(routerCard).join("")}</div>` : `
       <div class="panel empty">
         <h2>Подключите первый роутер</h2>
@@ -219,10 +260,14 @@ async function renderRouter(id, tab){
   try{ S.router = await get("/api/routers/" + id); }catch(e){ return handleErr(e); }
   S.tab = TABS.some(t => t[0]===tab) ? tab : "overview";
   const r = S.router;
+  const st0 = statusOf(r), b0 = st0.board || {};
   app.innerHTML = `
-    <div class="rhead"><a href="#/" class="btn ghost" aria-label="К списку">←</a><h1>${esc(r.name)}</h1><span id="rpill"></span>
-      ${r.role!=="owner" ? `<span class="pill">${ROLE[r.role]}</span>` : ""}</div>
-    <div class="tabs" role="tablist">${TABS.map(([k,l]) => `<a class="tab btn" role="tab" href="#/r/${r.id}/${k}" aria-selected="${k===S.tab}">${l}</a>`).join("")}</div>
+    <div class="hero">
+      <div class="rhead"><a href="#/" class="btn ghost" aria-label="К списку">←</a><h1>${esc(r.name)}</h1><span id="rpill"></span>
+        ${r.role!=="owner" ? `<span class="pill">${ROLE[r.role]}</span>` : ""}</div>
+      <div class="sub">${[b0.model, b0.release ? "OpenWrt " + b0.release : "", st0.mihomo?.version ? "mihomo " + st0.mihomo.version : ""].filter(Boolean).map(esc).join(" · ") || "&nbsp;"}</div>
+      <div class="tabs" role="tablist">${TABS.map(([k,l]) => `<a class="tab btn" role="tab" href="#/r/${r.id}/${k}" aria-selected="${k===S.tab}">${l}</a>`).join("")}</div>
+    </div>
     <div id="tabBody" class="tabbody"></div>`;
   drawPill();
   every(15000, async () => { try{ S.router = await get("/api/routers/" + id); drawPill(); if(S.tab==="overview") drawOverview(); }catch(e){} });
@@ -243,7 +288,15 @@ function tabOverview(body){
 function drawOverview(){
   const el = $("#ov"); if(!el) return;
   const r = S.router, st = statusOf(r), b = st.board || {}, nk = st.nikki || {}, m = st.memory || {};
+  const used = m.total ? m.total - m.available : null, ex = st.exit;
   el.innerHTML = `
+    <div class="stats">
+      ${stat("Nikki", nk.running ? "работает" : st.nikki ? "остановлен" : "—", st.mihomo?.reachable ? "mihomo " + esc(st.mihomo.version) : esc(st.mihomo?.error || ""), "power", nk.running ? "g-ok" : "g-warn")}
+      ${stat("Выход", ex?.chain?.length ? fname(ex.chain[ex.chain.length-1]) : "—", ex ? [esc(ex.group), ...ex.chain.slice(0,-1).map(esc)].join(" → ") + (ex.delay ? ` · ${ex.delay} мс` : "") : "нет данных", "globe", "g-main")}
+      ${stat("Трафик", st.traffic ? "↓ " + bytes(st.traffic.down) : "—", st.traffic ? `↑ ${bytes(st.traffic.up)} · ${st.traffic.connections} соед.` : "", "swap", "g-info")}
+      ${stat("Память", used != null ? Math.round(used / m.total * 100) + "%" : "—", used != null ? `${bytes(used)} из ${bytes(m.total)}` : "", "chip", "g-amber")}
+    </div>
+    ${st.status_error ? `<div class="note err small">Агент не смог собрать часть статуса: ${esc(st.status_error)}</div>` : ""}
     ${!r.online ? `<div class="note">Роутер не на связи с ${ago(r.last_seen)}. Показан последний полученный статус${r.status_at ? " (" + fmtDate(r.status_at) + ")" : ""}. Команды станут доступны, когда агент снова подключится.</div>` : ""}
     <div class="panel">
       <div class="spread"><h3>Роутер</h3><span class="small muted">статус ${ago(r.status_at)}</span></div>
@@ -271,12 +324,13 @@ function drawOverview(){
     <div class="cols">
       <div class="panel"><h3>Группы</h3>
         ${(st.groups||[]).length ? `<div class="tbl"><table><thead><tr><th>Группа</th><th>Тип</th><th>Сейчас</th><th></th></tr></thead><tbody>
-          ${st.groups.map(g => `<tr><td>${esc(g.name)}</td><td class="muted">${esc(GT[g.type]||g.type)}</td><td>${esc(g.now||"—")}</td><td class="num">${delay(g.delay)}</td></tr>`).join("")}
-        </tbody></table></div>` : `<div class="muted small">Нет данных</div>`}
+          ${st.groups.map(g => `<tr><td>${esc(g.name)}</td><td class="muted">${esc(GT[g.type]||g.type)}</td><td>${g.now ? fname(g.now) : "—"}</td><td class="num">${delay(g.delay)}</td></tr>`).join("")}
+        </tbody></table></div>` : `<div class="muted small">${st.mihomo?.reachable === false ? "mihomo не отвечает — групп не видно" : "Нет данных"}</div>`}
+        ${(st.groups||[]).length ? `<a class="small" href="#/r/${r.id}/proxies">Управлять группами →</a>` : ""}
       </div>
       <div class="panel"><h3>Подписки</h3>
         ${(st.providers||[]).length ? `<div class="tbl"><table><thead><tr><th>Подписка</th><th>Узлы</th><th>Обновлена</th><th>Трафик / срок</th></tr></thead><tbody>
-          ${st.providers.map(p => `<tr><td>${esc(p.name)}</td><td class="num">${p.alive}/${p.count}</td><td class="muted">${ago(p.updated)}</td><td>${esc(subLine(p.sub) || "—")}</td></tr>`).join("")}
+          ${st.providers.map(p => `<tr><td>${fname(p.name)}</td><td class="num">${p.alive}/${p.count}</td><td class="muted">${ago(p.updated)}</td><td>${esc(subLine(p.sub) || "—")}</td></tr>`).join("")}
         </tbody></table></div>` : `<div class="muted small">Нет данных</div>`}
       </div>
     </div>
@@ -321,6 +375,7 @@ function tabConfig(body){
     api: (method, path, b) => cmd(r.id, "mihomo.api", {method, path, body: b}),
   };
   body.innerHTML = `<iframe class="frame" src="configurator.html" title="Конфигуратор ${esc(r.name)}"></iframe>`;
+  body.querySelector("iframe").addEventListener("load", () => themeApply(themeGet()));
 }
 
 async function tabHistory(body){

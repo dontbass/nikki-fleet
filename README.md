@@ -159,4 +159,4 @@ nikki-fleet update                   обновить пакеты nikki-fleet (
 
 ## Лицензия
 
-GPL-3.0-or-later. Проект использует [Nikki](https://github.com/nikkinikki-org/OpenWrt-nikki) (GPL-3.0) и [js-yaml](https://github.com/nodeca/js-yaml) (MIT).
+GPL-3.0-or-later. Проект использует [Nikki](https://github.com/nikkinikki-org/OpenWrt-nikki) (GPL-3.0), [js-yaml](https://github.com/nodeca/js-yaml) (MIT) и шрифт флагов [Twemoji Country Flags](https://github.com/talkjs/country-flag-emoji-polyfill) (графика [Twemoji](https://github.com/twitter/twemoji), CC-BY 4.0) — чтобы флаги стран были видны и в Windows.

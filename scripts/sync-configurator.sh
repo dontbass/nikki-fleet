@@ -8,6 +8,7 @@ for DST in panel/web openwrt/luci-app-nikki-fleet/htdocs/luci-static/resources/n
 	mkdir -p "$DST"
 	cp "$SRC/index.html" "$DST/configurator.html"
 	cp "$SRC/js-yaml.min.js" "$DST/js-yaml.min.js"
+	cp "$SRC/flags.woff2" "$DST/flags.woff2"
 done
 echo "configurator synced"
 cp install.sh panel/install.sh.tmpl

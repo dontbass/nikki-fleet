@@ -5,7 +5,7 @@
 
 import { readfile, writefile, popen, stat, lsdir, mkdir, unlink, rename } from 'fs';
 
-export const VERSION = '0.1.10';
+export const VERSION = '0.1.11';
 
 // NF_ROOT lets tests run against a fake filesystem root.
 const ROOT = getenv('NF_ROOT') ?? '';
@@ -280,6 +280,13 @@ export function api(method, path, body, timeout) {
 function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
 export const UPDATE_LOG = ROOT + '/tmp/nikki-fleet-update.log';
 
+const UPDATE_PID = ROOT + '/tmp/nikki-fleet-update.pid';
+
+function update_running() {
+	const pid = trim(readfile(UPDATE_PID) ?? '');
+	return pid != '' && stat('/proc/' + pid) != null;
+}
+
 export function logs_tail(which, lines) {
 	lines = clamp(int(lines ?? 100), 1, 1000);
 	if (which == 'update') {
@@ -432,12 +439,6 @@ export function update_subscription(section) {
 
 /* ---------- self-update ---------- */
 
-const UPDATE_PID = ROOT + '/tmp/nikki-fleet-update.pid';
-
-function update_running() {
-	const pid = trim(readfile(UPDATE_PID) ?? '');
-	return pid != '' && stat('/proc/' + pid) != null;
-}
 
 // Runs the panel's installer in the background: it fetches the latest
 // nikki-fleet packages (from GitHub or through the panel) and upgrades them.
@@ -599,6 +600,50 @@ function board() {
 	return { model: null, release: g('DISTRIB_RELEASE'), target: g('DISTRIB_TARGET'), kernel: null };
 }
 
+function status_details(out) {
+
+	const pp = api('GET', '/providers/proxies', null, 8);
+	out.providers = [];
+	for (let n, p in (pp.data?.providers ?? {})) {
+		if (p.vehicleType == 'Compatible')
+			continue;
+		let alive = 0;
+		for (let x in (p.proxies ?? []))
+			if (x.alive) alive++;
+		push(out.providers, { name: n, count: length(p.proxies ?? []), alive: alive,
+			updated: p.updatedAt, sub: p.subscriptionInfo });
+	}
+	const px = api('GET', '/proxies', null, 8);
+	out.groups = [];
+	for (let n, g in (px.data?.proxies ?? {})) {
+		if (!(g.type in [ 'Selector', 'URLTest', 'Fallback', 'LoadBalance', 'Relay' ]) || n == 'GLOBAL')
+			continue;
+		const h = g.now != null ? px.data.proxies[g.now]?.history : null;
+		push(out.groups, { name: n, type: g.type, now: g.now, delay: type(h) == 'array' && length(h) ? h[length(h) - 1]?.delay : null });
+	}
+	// config order (GLOBAL lists groups as written), and where the first group finally leads
+	const order = {};
+	let i = 0;
+	for (let n in (px.data?.proxies?.GLOBAL?.all ?? []))
+		order[n] = i++;
+	sort(out.groups, (a, b) => (order[a.name] ?? 100000) - (order[b.name] ?? 100000));
+	if (length(out.groups)) {
+		const chain = [];
+		let cur = out.groups[0].now;
+		while (cur && length(chain) < 8) {
+			push(chain, cur);
+			const g = px.data.proxies[cur];
+			cur = type(g?.all) == 'array' ? g.now : null;
+		}
+		const last = length(chain) ? px.data.proxies[chain[length(chain) - 1]]?.history : null;
+		out.exit = { group: out.groups[0].name, chain: chain,
+			delay: type(last) == 'array' && length(last) ? last[length(last) - 1]?.delay : null };
+	}
+	const cn = api('GET', '/connections', null, 5);
+	if (cn.ok)
+		out.traffic = { up: cn.data?.uploadTotal, down: cn.data?.downloadTotal, connections: length(cn.data?.connections ?? []) };
+}
+
 export function status(full) {
 	const up = split(readfile('/proc/uptime') ?? '0', ' ');
 	const la = split(readfile('/proc/loadavg') ?? '', ' ');
@@ -632,28 +677,3 @@ export function status(full) {
 	return out;
 };
 
-function status_details(out) {
-
-	const pp = api('GET', '/providers/proxies', null, 8);
-	out.providers = [];
-	for (let n, p in (pp.data?.providers ?? {})) {
-		if (p.vehicleType == 'Compatible')
-			continue;
-		let alive = 0;
-		for (let x in (p.proxies ?? []))
-			if (x.alive) alive++;
-		push(out.providers, { name: n, count: length(p.proxies ?? []), alive: alive,
-			updated: p.updatedAt, sub: p.subscriptionInfo });
-	}
-	const px = api('GET', '/proxies', null, 8);
-	out.groups = [];
-	for (let n, g in (px.data?.proxies ?? {})) {
-		if (!(g.type in [ 'Selector', 'URLTest', 'Fallback', 'LoadBalance', 'Relay' ]) || n == 'GLOBAL')
-			continue;
-		const h = g.now != null ? px.data.proxies[g.now]?.history : null;
-		push(out.groups, { name: n, type: g.type, now: g.now, delay: type(h) == 'array' && length(h) ? h[length(h) - 1]?.delay : null });
-	}
-	const cn = api('GET', '/connections', null, 5);
-	if (cn.ok)
-		out.traffic = { up: cn.data?.uploadTotal, down: cn.data?.downloadTotal, connections: length(cn.data?.connections ?? []) };
-}

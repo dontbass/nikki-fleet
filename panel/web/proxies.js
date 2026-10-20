@@ -87,7 +87,7 @@ function tabProxies(body, r){
     const n = P.data.nodes[name], sel = g && g.now === name, can = edit && g && PX_SELECTABLE[g.type];
     const isGroup = P.data.groups.some(x => x.name === name);
     return `<div class="pxt${sel ? " sel" : ""}${can ? " can" : ""}" ${can ? `role="button" tabindex="0" data-pxsel="${esc(name)}" data-pxg="${esc(g.name)}"` : ""} title="${esc(name)}">
-      <span class="pxn">${esc(name)}</span>
+      <span class="pxn">${fname(name)}</span>
       <span class="pxk">${isGroup ? `<span class="pxgrp">группа</span> ` : ""}${esc(pxKind(n))}</span>
       <button class="pxdb" data-pxtest="${esc(name)}" title="Проверить задержку" aria-label="Проверить задержку ${esc(name)}">${P.testing.has("n:" + name) ? `<span class="pxd none">…</span>` : pxDelay(delayOf(name))}</button>
     </div>`;
@@ -106,7 +106,7 @@ function tabProxies(body, r){
         <div class="pxgh">
           <button class="pxtog" data-pxopen="${esc(g.name)}" aria-expanded="${open}"><span class="chev">${open ? "▾" : "▸"}</span><b>${esc(g.name)}</b>
             <span class="pill">${esc(PX_GTYPE[g.type] || g.type)}</span><span class="small muted">${alive}/${all.length}</span></button>
-          <span class="pxnow small">${chain.length ? esc(chain.join(" → ")) : "—"}${g.fixed ? ` <span class="pill warn" title="Автовыбор отключён: узел закреплён вручную">закреплён</span>${edit ? ` <button class="ghost small" data-pxunfix="${esc(g.name)}">открепить</button>` : ""}` : ""}</span>
+          <span class="pxnow small">${chain.length ? chain.map(fname).join(" → ") : "—"}${g.fixed ? ` <span class="pill warn" title="Автовыбор отключён: узел закреплён вручную">закреплён</span>${edit ? ` <button class="ghost small" data-pxunfix="${esc(g.name)}">открепить</button>` : ""}` : ""}</span>
           <span class="grow"></span>
           ${pxDelay(delayOf(g.name))}
           <button class="small" data-pxgtest="${esc(g.name)}" ${P.testing.has("g:" + g.name) ? "disabled" : ""}>${P.testing.has("g:" + g.name) ? "проверяю…" : "⚡ проверить"}</button>
