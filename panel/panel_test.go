@@ -50,7 +50,7 @@ func testApp(t *testing.T) (*App, *httptest.Server) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	app := &App{cfg: Config{Repo: "x/y"}, store: st, hub: NewHub(), lim: newLimiter()}
+	app := &App{cfg: Config{Repo: "x/y"}, store: st, hub: NewHub(), lim: newLimiter(), mirror: newMirror(t.TempDir(), "x/y")}
 	srv := httptest.NewServer(app.routes())
 	t.Cleanup(srv.Close)
 	return app, srv
@@ -211,5 +211,30 @@ func TestOfflineRouter(t *testing.T) {
 	app.store.Update(func(s *state) error { s.router(en.RouterID).LastSeen = time.Now().Add(-time.Hour); return nil })
 	if code := c.do("POST", "/api/routers/"+en.RouterID+"/cmd", map[string]any{"type": "status"}, nil); code != 503 {
 		t.Fatalf("offline router should return 503, got %d", code)
+	}
+}
+
+func TestMirrorNames(t *testing.T) {
+	ok := []string{"nikki_aarch64_cortex-a53-openwrt-24.10.tar.gz", "nikki_x86_64-openwrt-25.12.tar.gz", "nikki_mipsel_24kc-SNAPSHOT.tar.gz"}
+	bad := []string{"../state.json", "nikki_x/../../etc-openwrt-24.10.tar.gz", "evil.tar.gz", "nikki_x86_64-openwrt-23.05.tar.gz"}
+	for _, n := range ok {
+		if !reNikkiTar.MatchString(n) {
+			t.Errorf("should allow %s", n)
+		}
+	}
+	for _, n := range bad {
+		if reNikkiTar.MatchString(n) {
+			t.Errorf("should reject %s", n)
+		}
+	}
+	for _, n := range []string{"nikki-fleet_0.1.4-r1_all.ipk", "luci-i18n-nikki-fleet-ru-26.293.55828.c176122.apk"} {
+		if !reFleetAsset.MatchString(n) {
+			t.Errorf("should allow %s", n)
+		}
+	}
+	for _, n := range []string{"../x.ipk", "a/b.apk", "x.sh"} {
+		if reFleetAsset.MatchString(n) {
+			t.Errorf("should reject %s", n)
+		}
 	}
 }

@@ -2,7 +2,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=nikki-fleet
-PKG_VERSION:=0.1.4
+PKG_VERSION:=0.1.5
 PKG_RELEASE:=1
 
 PKG_LICENSE:=GPL-3.0-or-later
