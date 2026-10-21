@@ -280,6 +280,8 @@ usage:
   nikki-fleet watchdog                   restore the previous profile if a change was not confirmed
   nikki-fleet doctor                     diagnose the connection to the panel
   nikki-fleet update [panel-url]         upgrade nikki-fleet packages in the background
+  nikki-fleet starter <name> <url> [--profile=file.yaml]
+                                         create a working profile from the starter template
 `;
 
 const argv = ARGV;
@@ -373,6 +375,23 @@ case 'doctor': {
 	print(sprintf('enabled %s, running %s, mihomo api %s\n', st.nikki.enabled, st.nikki.running, st.mihomo.reachable));
 	print(ops.sh('free | head -n 2; df -h /overlay /tmp 2>/dev/null').out);
 	break;
+}
+case 'starter': {
+	// fill the starter template with one subscription and make it the active profile
+	const name = args[1], url = args[2];
+	if (!match(name ?? '', /^[A-Za-z0-9_-]{1,32}$/) || !match(url ?? '', /^https?:\/\/[^ "\\]+$/))
+		die('usage: nikki-fleet starter <name> <subscription-url>   (name: letters, digits, _ or -)');
+	const tpl = readfile(P.starter);
+	if (!tpl)
+		die('template not found: ' + P.starter);
+	const prof = filter(argv, a => match(a, /^--profile=/))[0];
+	let content = replace(tpl, '__NAME__', name);
+	content = replace(content, '__URL__', url);
+	content = replace(content, '__HWID__', ops.uid());
+	const r = ops.write_profile({ kind: 'file', name: prof ? substr(prof, 10) : 'nikki-fleet.yaml', content: content,
+		activate: true, reload: true });
+	out(r);
+	exit(r.ok ? 0 : 2);
 }
 case 'update': {
 	const c = agent_cfg();

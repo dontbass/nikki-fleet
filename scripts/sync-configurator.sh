@@ -13,3 +13,6 @@ done
 echo "configurator synced"
 cp install.sh panel/install.sh.tmpl
 echo "install.sh synced"
+cp templates/starter.yaml panel/web/starter.yaml
+cp templates/starter.yaml openwrt/nikki-fleet/files/starter.yaml
+echo "starter template synced"

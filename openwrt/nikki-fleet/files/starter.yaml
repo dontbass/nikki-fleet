@@ -1,0 +1,235 @@
+# nikki-fleet starter profile for Nikki + mihomo.
+# Placeholders: __NAME__ (subscription name: letters, digits, _ or -),
+# __URL__ (subscription link), __HWID__ (device id sent to the subscription server).
+# The panel's "Быстрая настройка" and `nikki-fleet starter <name> <url>` fill them in.
+# Traffic to blocked services and CDNs goes through the subscription; Russian
+# sites and everything else go direct.
+
+mixed-port: 7890
+mode: rule
+ipv6: false
+log-level: error
+allow-lan: true
+unified-delay: true
+tcp-concurrent: true
+external-controller: 127.0.0.1:9090
+
+dns:
+  enable: true
+  listen: 127.0.0.1:7874
+  ipv6: false
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - "*.lan"
+    - "*.local"
+    - "*.localdomain"
+    - localhost.ptlogin2.qq.com
+    - +.lan
+    - +.local
+    - +.push.apple.com
+    - +.msftconnecttest.com
+    - +.3gppnetwork
+    - +.apple.com
+    - Mijia Cloud
+  default-nameserver:
+    - 223.5.5.5
+    - 77.88.8.8
+  nameserver:
+    - https://dns.alidns.com/dns-query#h3=true
+    - https://doh.360.cn/dns-query
+    - https://dns.quad9.net/dns-query
+    - tls://dns.quad9.net:853
+  fallback:
+    - https://1.1.1.1/dns-query
+    - https://8.8.8.8/dns-query
+  fallback-filter:
+    geoip: true
+    geoip-code: RU
+    ipcidr:
+      - 0.0.0.0/8
+      - 10.0.0.0/8
+      - 127.0.0.0/8
+      - 169.254.0.0/16
+      - 172.16.0.0/12
+      - 192.168.0.0/16
+      - 240.0.0.0/4
+    domain:
+      - +.google.com
+      - +.facebook.com
+      - +.twitter.com
+      - +.youtube.com
+      - +.instagram.com
+      - +.openai.com
+      - +.anthropic.com
+  prefer-h3: true
+
+keep-alive-idle: 120
+keep-alive-interval: 30
+
+profile:
+  store-selected: true
+  tracing: false
+
+sniffer:
+  enable: true
+  force-dns-mapping: true
+  parse-pure-ip: true
+  sniff:
+    HTTP:
+      ports:
+        - 80
+        - 8080-8880
+    TLS:
+      ports:
+        - 443
+        - 8443
+    QUIC:
+      ports:
+        - 443
+        - 8443
+  skip-domain:
+    - Mijia Cloud
+    - +.lan
+    - +.local
+    - +.push.apple.com
+    - +.apple.com
+    - +.msftconnecttest.com
+    - +.3gppnetwork
+  skip-dst-address:
+    - 5.28.192.0/18
+    - 91.105.192.0/23
+    - 91.108.4.0/22
+    - 91.108.8.0/21
+    - 91.108.16.0/21
+    - 91.108.56.0/22
+    - 95.161.64.0/20
+    - 109.239.140.0/24
+    - 149.154.160.0/20
+    - 185.76.151.0/24
+    - 2001:67c:4e8::/48
+    - 2001:b28:f23c::/47
+    - 2001:b28:f23f::/48
+    - 2a0a:f280::/32
+
+proxy-providers:
+  __NAME__:
+    type: http
+    url: "__URL__"
+    path: ./providers/__NAME__.yaml
+    interval: 86400
+    health-check:
+      enable: true
+      url: http://www.msftconnecttest.com/connecttest.txt
+      interval: 600
+      timeout: 5000
+      expected-status: 200
+    override:
+      skip-cert-verify: true
+    header:
+      User-Agent: ["Happ"]
+      x-hwid: ["__HWID__"]
+      x-device-os: ["Android"]
+      x-ver-os: ["14"]
+      x-device-model: ["SM-S918B"]
+
+proxy-groups:
+  - name: Proxy
+    type: select
+    proxies: [__NAME__-Manual, __NAME__-Best, DIRECT]
+
+  - name: __NAME__-Best
+    type: url-test
+    use: [__NAME__]
+    url: http://www.msftconnecttest.com/connecttest.txt
+    interval: 300
+    tolerance: 50
+
+  - name: __NAME__-Manual
+    type: select
+    use: [__NAME__]
+
+rule-providers:
+  geosite-youtube:
+    behavior: domain
+    type: http
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/youtube.yaml
+    interval: 86400
+
+  geosite-twitter:
+    behavior: domain
+    type: http
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/twitter.yaml
+    interval: 86400
+
+  geosite-facebook:
+    behavior: domain
+    type: http
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/facebook.yaml
+    interval: 86400
+
+  geosite-whatsapp:
+    behavior: domain
+    type: http
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/whatsapp.yaml
+    interval: 86400
+
+  geosite-instagram:
+    behavior: domain
+    type: http
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/instagram.yaml
+    interval: 86400
+
+  geosite-openai:
+    behavior: domain
+    type: http
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/openai.yaml
+    interval: 86400
+
+  geosite-google-gemini:
+    behavior: domain
+    type: http
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/google-gemini.yaml
+    interval: 86400
+
+  geosite-anthropic:
+    behavior: domain
+    type: http
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/anthropic.yaml
+    interval: 86400
+
+  cdn-all:
+    behavior: ipcidr
+    type: http
+    url: https://raw.githubusercontent.com/123jjck/cdn-ip-ranges/refs/heads/main/all/all_plain_ipv4.txt
+    interval: 86400
+    format: text
+
+  telegram:
+    behavior: ipcidr
+    type: http
+    url: https://raw.githubusercontent.com/123jjck/cdn-ip-ranges/refs/heads/main/telegram/telegram_plain_ipv4.txt
+    interval: 86400
+    format: text
+
+  ru-blocked:
+    behavior: domain
+    type: http
+    url: https://cdn.jsdelivr.net/gh/shvchk/unblock-net/lists/clash/ru-blocked
+    interval: 86400
+    format: text
+
+rules:
+  - RULE-SET,telegram,Proxy
+  - RULE-SET,geosite-youtube,Proxy
+  - RULE-SET,geosite-twitter,Proxy
+  - RULE-SET,geosite-facebook,Proxy
+  - RULE-SET,geosite-whatsapp,Proxy
+  - RULE-SET,geosite-instagram,Proxy
+  - RULE-SET,geosite-openai,Proxy
+  - RULE-SET,geosite-google-gemini,Proxy
+  - RULE-SET,geosite-anthropic,Proxy
+  - RULE-SET,cdn-all,Proxy
+  - GEOIP,RU,DIRECT
+  - RULE-SET,ru-blocked,Proxy
+  - MATCH,DIRECT

@@ -5,7 +5,7 @@
 
 import { readfile, writefile, popen, stat, lsdir, mkdir, unlink, rename } from 'fs';
 
-export const VERSION = '0.1.11';
+export const VERSION = '0.1.12';
 
 // NF_ROOT lets tests run against a fake filesystem root.
 const ROOT = getenv('NF_ROOT') ?? '';
@@ -22,6 +22,7 @@ export const P = {
 	tmp: ROOT + '/tmp',
 	logs: [ROOT + '/var/log/nikki', ROOT + '/tmp/log/nikki'],
 	uci_conf: ROOT ? ROOT + '/etc/config' : null,
+	starter: ROOT + '/usr/share/nikki-fleet/starter.yaml',
 };
 
 const MIHOMO = getenv('NF_MIHOMO') ?? 'mihomo';
@@ -380,8 +381,11 @@ export function write_profile(opts) {
 		writefile(path, readfile(P.backups + '/' + bk));
 	else if (activated)
 		unlink(path);
-	if (activated && act.kind) {
-		uci_set('nikki.config.profile', act.kind + ':' + act.name);
+	if (activated) {
+		if (act.kind)
+			uci_set('nikki.config.profile', act.kind + ':' + act.name);
+		else
+			sh(uci_cmd() + ' delete nikki.config.profile');
 		uci_commit('nikki');
 	}
 	if (turned_on) {

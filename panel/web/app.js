@@ -152,7 +152,7 @@ function renderAuth(){
   const first = S.info?.first_user, canReg = S.info?.registration;
   let mode = first ? "register" : "login";
   const draw = () => {
-    app.innerHTML = `<div class="auth"><form class="panel" id="authForm">
+    app.innerHTML = `<div class="auth"><img class="brandlogo only-light" src="logo.webp" alt="nikki-fleet" width="720" height="431"><img class="brandlogo only-dark" src="logo-dark.webp" alt="nikki-fleet" width="720" height="431"><form class="panel" id="authForm">
       <h1>${mode==="register" ? (first ? "Создайте учётную запись администратора" : "Регистрация") : "Вход в nikki-fleet"}</h1>
       ${first ? `<div class="note">Это первый запуск панели. Первая учётная запись получает права администратора.</div>` : ""}
       <label class="f"><span>Имя пользователя</span><input id="au" autocomplete="username" required minlength="3" maxlength="64"></label>
@@ -202,8 +202,8 @@ async function renderFleet(){
   const draw = () => {
     const rs = S.routers, on = rs.filter(r => r.online).length;
     app.innerHTML = `
-      <div class="pagehead"><div><h1>Роутеры</h1><div class="muted small">Nikki + mihomo под управлением nikki-fleet</div></div>
-        <button class="primary" id="addRouter">+ Подключить роутер</button></div>
+      <div class="fleethero"><div class="txt"><h1>Ваш флот</h1><p>Роутеры с Nikki + mihomo: статус, прокси-группы, трафик и конфиг — удалённо, без белого IP.</p>
+        <button class="primary" id="addRouter">+ Подключить роутер</button></div><img class="art" src="art.webp" alt="" width="560" height="265"></div>
       ${rs.length ? `<div class="fleetstats">
         ${stat("Роутеров", rs.length, "всего в панели", "router", "g-main")}
         ${stat("В сети", on, on === rs.length ? "все на связи" : "", "on", "g-ok")}
@@ -296,6 +296,9 @@ function drawOverview(){
       ${stat("Трафик", st.traffic ? "↓ " + bytes(st.traffic.down) : "—", st.traffic ? `↑ ${bytes(st.traffic.up)} · ${st.traffic.connections} соед.` : "", "swap", "g-info")}
       ${stat("Память", used != null ? Math.round(used / m.total * 100) + "%" : "—", used != null ? `${bytes(used)} из ${bytes(m.total)}` : "", "chip", "g-amber")}
     </div>
+    ${r.online && canEdit() && st.nikki && !nk.profile?.name ? `<div class="panel starter">
+      <div><h2>Nikki ещё не настроен</h2><div class="small muted">Создайте рабочий профиль из готового шаблона — нужны только название и ссылка подписки. Nikki включится автоматически после проверки конфига.</div></div>
+      <button class="primary" id="aStarter">Быстрая настройка</button></div>` : ""}
     ${st.status_error ? `<div class="note err small">Агент не смог собрать часть статуса: ${esc(st.status_error)}</div>` : ""}
     ${!r.online ? `<div class="note">Роутер не на связи с ${ago(r.last_seen)}. Показан последний полученный статус${r.status_at ? " (" + fmtDate(r.status_at) + ")" : ""}. Команды станут доступны, когда агент снова подключится.</div>` : ""}
     <div class="panel">
@@ -311,7 +314,7 @@ function drawOverview(){
     </div>
     <div class="panel">
       <div class="spread"><h3>Nikki и mihomo</h3>
-        ${canEdit() && r.online ? `<div class="row">${nk.enabled===false ? `<button class="primary" id="aEnable">Включить Nikki</button>` : `<button id="aReload">Перезапустить Nikki</button><button id="aUpdSubs">Обновить подписки</button><button class="ghost danger" id="aDisable">Выключить</button>`}</div>` : ""}</div>
+        ${canEdit() && r.online ? `<div class="row">${nk.enabled===false ? `${nk.profile?.name ? `<button class="primary" id="aEnable">Включить Nikki</button>` : ""}<button id="aStarter2" title="Новый профиль из шаблона">Шаблон профиля</button>` : `<button id="aReload">Перезапустить Nikki</button><button id="aStarter2" title="Новый профиль из шаблона">Шаблон профиля</button><button id="aUpdSubs">Обновить подписки</button><button class="ghost danger" id="aDisable">Выключить</button>`}</div>` : ""}</div>
       <div class="kv">
         <div><b>Nikki</b><span>${nk.running ? `<span class="ok">работает</span>` : st.nikki ? `<span class="err">остановлен</span>` : "—"}${nk.enabled===false ? " · выключен в настройках" : ""}</span></div>
         <div><b>Версия Nikki</b><span>${esc(nk.version || "—")}</span></div>
@@ -336,6 +339,8 @@ function drawOverview(){
     </div>
     <div class="note small">Полная настройка — на вкладке «Конфигуратор»: подписки, правила, группы и клиенты, с сохранением прямо на роутер.</div>`;
   $("#aUpdate")?.addEventListener("click", () => updateDialog(S.router));
+  $("#aStarter")?.addEventListener("click", () => starterDialog(S.router, {hasProfile:false}));
+  $("#aStarter2")?.addEventListener("click", () => starterDialog(S.router, {hasProfile:!!nk.profile?.name}));
   $("#aReload")?.addEventListener("click", async e => {
     const b = e.currentTarget; b.disabled = true; b.textContent = "Перезапускаю…";
     try{ const d = await cmd(S.router.id, "nikki.reload"); flash(d.api ? "Nikki перезапущен, mihomo отвечает" : "Nikki перезапущен, но mihomo пока не отвечает", !d.api); }

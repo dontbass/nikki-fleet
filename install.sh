@@ -208,3 +208,7 @@ else
 	say "готово. Конфигуратор: LuCI → Службы → Nikki → Конфигуратор"
 	say "подключить к панели: LuCI → Nikki → Удалённое управление, или  nikki-fleet enroll <адрес-панели> <код>"
 fi
+if [ -z "$(uci -q get nikki.config.profile)" ]; then
+	say "Nikki ещё не настроен. Готовый профиль из шаблона: в панели — «Быстрая настройка»,"
+	say "или здесь:  nikki-fleet starter <название> <ссылка-подписки>"
+fi
