@@ -75,6 +75,7 @@ type ConfigVersion struct {
 
 type Settings struct {
 	Registration string `json:"registration"` // open | closed
+	Wallpaper    string `json:"wallpaper"`    // "" = Bing picture of the day on the login page, "off"
 }
 
 type state struct {

@@ -624,7 +624,11 @@ func (a *App) adminUsers(w http.ResponseWriter, r *http.Request, u *User) {
 	if reg == "" {
 		reg = "closed"
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"users": out, "registration": reg})
+	wp := "bing"
+	if !a.wallpaperEnabled() {
+		wp = "off"
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"users": out, "registration": reg, "wallpaper": wp})
 }
 
 func (a *App) adminCreateUser(w http.ResponseWriter, r *http.Request, u *User) {
@@ -708,12 +712,29 @@ func (a *App) adminSettings(w http.ResponseWriter, r *http.Request, u *User) {
 		return
 	}
 	var req struct {
-		Registration string `json:"registration"`
+		Registration *string `json:"registration"`
+		Wallpaper    *string `json:"wallpaper"`
 	}
-	if err := readJSON(r, &req, 4096); err != nil || (req.Registration != "open" && req.Registration != "closed") {
+	if err := readJSON(r, &req, 4096); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad request")
+		return
+	}
+	if req.Registration != nil && *req.Registration != "open" && *req.Registration != "closed" {
 		writeErr(w, http.StatusBadRequest, "registration: open или closed")
 		return
 	}
-	a.store.UpdateNow(func(s *state) error { s.Settings.Registration = req.Registration; return nil })
+	if req.Wallpaper != nil && *req.Wallpaper != "bing" && *req.Wallpaper != "off" {
+		writeErr(w, http.StatusBadRequest, "wallpaper: bing или off")
+		return
+	}
+	a.store.UpdateNow(func(s *state) error {
+		if req.Registration != nil {
+			s.Settings.Registration = *req.Registration
+		}
+		if req.Wallpaper != nil {
+			s.Settings.Wallpaper = strings.TrimPrefix(*req.Wallpaper, "bing")
+		}
+		return nil
+	})
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

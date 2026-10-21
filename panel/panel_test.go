@@ -50,7 +50,7 @@ func testApp(t *testing.T) (*App, *httptest.Server) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	app := &App{cfg: Config{Repo: "x/y"}, store: st, hub: NewHub(), lim: newLimiter(), mirror: newMirror(t.TempDir(), "x/y")}
+	app := &App{cfg: Config{Repo: "x/y"}, store: st, hub: NewHub(), lim: newLimiter(), mirror: newMirror(t.TempDir(), "x/y"), wall: newWallpaper(t.TempDir())}
 	srv := httptest.NewServer(app.routes())
 	t.Cleanup(srv.Close)
 	return app, srv
@@ -236,5 +236,48 @@ func TestMirrorNames(t *testing.T) {
 		if reFleetAsset.MatchString(n) {
 			t.Errorf("should reject %s", n)
 		}
+	}
+}
+
+func TestWallpaper(t *testing.T) {
+	jpeg := []byte("\xff\xd8\xff\xe0fake-jpeg")
+	hits := 0
+	bing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/HPImageArchive.aspx":
+			hits++
+			w.Write([]byte(`{"images":[{"url":"/th?id=OHR.Test_1920x1080.jpg","urlbase":"/th?id=OHR.Test","startdate":"20261021","title":"Озеро","copyright":"Озеро (© Автор)","copyrightlink":"https://www.bing.com/search?q=x"}]}`))
+		case "/th":
+			w.Header().Set("Content-Type", "image/jpeg")
+			w.Write(jpeg)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer bing.Close()
+	old := bingBase
+	bingBase = bing.URL
+	defer func() { bingBase = old }()
+
+	app, srv := testApp(t)
+	c := newClient(t, srv)
+	var info map[string]any
+	c.do("GET", "/api/wallpaper", nil, &info)
+	if info["available"] != true || info["copyright"] != "Озеро (© Автор)" {
+		t.Fatalf("wallpaper info: %v", info)
+	}
+	resp, err := http.Get(srv.URL + info["url"].(string))
+	if err != nil || resp.StatusCode != 200 {
+		t.Fatalf("image: %v %v", err, resp)
+	}
+	resp.Body.Close()
+	c.do("GET", "/api/wallpaper", nil, &info) // cached: no second request to Bing
+	if hits != 1 {
+		t.Fatalf("expected 1 Bing request, got %d", hits)
+	}
+	app.store.UpdateNow(func(s *state) error { s.Settings.Wallpaper = "off"; return nil })
+	c.do("GET", "/api/wallpaper", nil, &info)
+	if info["enabled"] != false {
+		t.Fatalf("disabled wallpaper still enabled: %v", info)
 	}
 }

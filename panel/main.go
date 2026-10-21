@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-var version = "0.1.13"
+var version = "0.1.14"
 
 //go:embed web
 var webFS embed.FS
@@ -39,6 +39,7 @@ type App struct {
 	hub    *Hub
 	lim    *limiter
 	mirror *mirror
+	wall   *wallpaper
 }
 
 func env(k, def string) string {
@@ -71,7 +72,7 @@ func main() {
 	if cfg.Registration != "" {
 		store.UpdateNow(func(s *state) error { s.Settings.Registration = cfg.Registration; return nil })
 	}
-	app := &App{cfg: cfg, store: store, hub: NewHub(), lim: newLimiter(), mirror: newMirror(cfg.DataDir, cfg.Repo)}
+	app := &App{cfg: cfg, store: store, hub: NewHub(), lim: newLimiter(), mirror: newMirror(cfg.DataDir, cfg.Repo), wall: newWallpaper(cfg.DataDir)}
 
 	srv := &http.Server{
 		Addr:              cfg.Listen,
@@ -104,6 +105,8 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /api/agent/v1/poll", a.agentPoll)
 	mux.HandleFunc("GET /install.sh", a.installScript)
 	mux.HandleFunc("GET /dl/{src}/{file}", a.mirrorHandler)
+	mux.HandleFunc("GET /api/wallpaper", a.wallpaperInfo)
+	mux.HandleFunc("GET /wallpaper.jpg", a.wallpaperImage)
 
 	// auth
 	mux.HandleFunc("POST /api/auth/register", a.register)

@@ -140,6 +140,7 @@ async function copy(text){
 function renderNav(){
   const n = $("#topnav");
   if(!S.me){ n.innerHTML = ""; return; }
+  clearWallpaper();
   const t = themeGet(), tl = {auto:"Тема: как в системе", light:"Тема: светлая", dark:"Тема: тёмная"}[t];
   n.innerHTML = `<button class="ghost" id="themeBtn" title="${tl}" aria-label="${tl}">${icon(t==="auto" ? "auto" : t==="light" ? "sun" : "moon", "ti")}</button><a class="btn ghost" href="#/account">${esc(S.me.username)}${S.me.is_admin ? " · админ" : ""}</a><button class="ghost" id="logout">Выйти</button>`;
 }
@@ -148,7 +149,25 @@ document.addEventListener("click", async e => {
 });
 
 /* ---------- auth ---------- */
+// Login page background: Bing picture of the day, cached by the panel (admin can turn it off)
+async function authWallpaper(){
+  let w; try{ w = await get("/api/wallpaper"); }catch(e){ return; }
+  if(!w?.available || S.me) return;
+  const img = new Image();
+  img.onload = () => {
+    if(S.me) return;
+    document.body.style.setProperty("--wall", `url("${w.url}")`);
+    document.body.classList.add("wall");
+    let cap = $("#wallCap");
+    if(!cap){ cap = document.createElement("div"); cap.id = "wallCap"; document.body.append(cap); }
+    cap.innerHTML = w.link ? `<a href="${esc(w.link)}" target="_blank" rel="noopener">${esc(w.copyright || w.title || "Bing")}</a>` : esc(w.copyright || w.title || "");
+  };
+  img.src = w.url;
+}
+function clearWallpaper(){ document.body.classList.remove("wall"); $("#wallCap")?.remove(); }
+
 function renderAuth(){
+  authWallpaper();
   const first = S.info?.first_user, canReg = S.info?.registration;
   let mode = first ? "register" : "login";
   const draw = () => {
@@ -520,10 +539,12 @@ async function renderAccount(){
     const d = await get("/api/admin/users");
     $("#adm").innerHTML = `<h3>Администрирование</h3>
       <label class="row small"><input type="checkbox" id="regOpen" style="width:auto"${d.registration==="open" ? " checked" : ""}> Открытая регистрация — любой может создать учётную запись и подключать свои роутеры</label>
+      <label class="row small"><input type="checkbox" id="wallOn" style="width:auto"${d.wallpaper!=="off" ? " checked" : ""}> Фон страницы входа — картинка дня Bing (панель скачивает её сама раз в день)</label>
       <div class="tbl"><table><thead><tr><th>Пользователь</th><th>Создан</th><th class="num">Роутеров</th><th></th></tr></thead><tbody>
         ${d.users.map(u => `<tr><td>${esc(u.username)}${u.is_admin ? " <span class='pill'>админ</span>" : ""}</td><td class="muted">${fmtDate(u.created)}</td><td class="num">${u.routers}</td><td>${u.id!==S.me.id ? `<button class="danger" data-deluser="${esc(u.id)}">Удалить</button>` : ""}</td></tr>`).join("")}
       </tbody></table></div>
       <form id="nuForm" class="row"><input id="nu" placeholder="новый пользователь" style="flex:1 1 160px" required><input id="np" type="password" placeholder="пароль (от 8 символов)" style="flex:1 1 160px" minlength="8" required><button class="primary">Создать</button></form>`;
+    $("#wallOn").onchange = async e => { try{ await patch("/api/admin/settings", {wallpaper: e.target.checked ? "bing" : "off"}); flash("Сохранено"); }catch(err){ flash(err.message, true); } };
     $("#regOpen").onchange = async e => { try{ await patch("/api/admin/settings", {registration: e.target.checked ? "open" : "closed"}); flash("Сохранено"); }catch(err){ flash(err.message, true); } };
     $("#nuForm").onsubmit = async e => { e.preventDefault(); try{ await post("/api/admin/users", {username: $("#nu").value.trim(), password: $("#np").value}); flash("Пользователь создан"); draw(); }catch(err){ flash(err.message, true); } };
     $("#adm").onclick = async e => {
