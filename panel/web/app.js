@@ -202,7 +202,7 @@ async function renderFleet(){
   const draw = () => {
     const rs = S.routers, on = rs.filter(r => r.online).length;
     app.innerHTML = `
-      <div class="fleethero"><div class="txt"><h1>Ваш флот</h1><p>Роутеры с Nikki + mihomo: статус, прокси-группы, трафик и конфиг — удалённо, без белого IP.</p>
+      <div class="fleethero"><div class="txt"><h1>Fleet</h1><p>Роутеры с Nikki + mihomo: статус, прокси-группы, трафик и конфиг — удалённо, без белого IP.</p>
         <button class="primary" id="addRouter">+ Подключить роутер</button></div><img class="art" src="art.webp" alt="" width="560" height="265"></div>
       ${rs.length ? `<div class="fleetstats">
         ${stat("Роутеров", rs.length, "всего в панели", "router", "g-main")}
