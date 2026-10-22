@@ -56,7 +56,9 @@ jobs:
       - name: names are declared before use (ucode has no hoisting)
         run: python3 scripts/check-ucode-order.py openwrt/nikki-fleet/files/ucode/nikki_fleet/ops.uc openwrt/nikki-fleet/files/nikki-fleet openwrt/luci-app-nikki-fleet/root/usr/share/rpcd/ucode/luci.nikki-fleet
       - name: shell scripts parse
-        run: for f in install.sh openwrt/nikki-fleet/files/*.sh; do sh -n "$f" && echo "ok: $f"; done && bash -n install-panel.sh
+        run: |
+          for f in install.sh openwrt/nikki-fleet/files/*.sh; do sh -n "$f" && echo "ok $f"; done
+          bash -n install-panel.sh
       - name: CLI arguments reach the script
         run: head -1 openwrt/nikki-fleet/files/nikki-fleet | grep -qx '#!/usr/bin/ucode --'
 
