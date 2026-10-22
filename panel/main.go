@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-var version = "0.1.14"
+var version = "0.1.15"
 
 //go:embed web
 var webFS embed.FS
@@ -64,6 +64,9 @@ func main() {
 		return
 	}
 	cfg.PublicURL = strings.TrimRight(cfg.PublicURL, "/")
+	if v := os.Getenv("NF_GITHUB"); v != "" {
+		ghBase = strings.TrimRight(v, "/") // a GitHub mirror for mihomo/zashboard downloads
+	}
 
 	store, err := OpenStore(cfg.DataDir)
 	if err != nil {
@@ -105,6 +108,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /api/agent/v1/poll", a.agentPoll)
 	mux.HandleFunc("GET /install.sh", a.installScript)
 	mux.HandleFunc("GET /dl/{src}/{file}", a.mirrorHandler)
+	mux.HandleFunc("GET /dl/mihomo/{tag}/{file}", a.mihomoMirror)
 	mux.HandleFunc("GET /api/wallpaper", a.wallpaperInfo)
 	mux.HandleFunc("GET /wallpaper.jpg", a.wallpaperImage)
 
@@ -118,6 +122,7 @@ func (a *App) routes() http.Handler {
 
 	// routers
 	mux.HandleFunc("GET /api/fleet/latest", a.requireUser(a.fleetLatest))
+	mux.HandleFunc("GET /api/latest", a.requireUser(a.latestVersions))
 	mux.HandleFunc("GET /api/routers", a.requireUser(a.listRouters))
 	mux.HandleFunc("POST /api/routers/enroll", a.requireUser(a.createEnrollCode))
 	mux.HandleFunc("GET /api/routers/{id}", a.requireUser(a.getRouter))

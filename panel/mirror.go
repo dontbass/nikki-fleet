@@ -135,12 +135,12 @@ func (m *mirror) fetch(ctx context.Context, url, path string, ttl time.Duration)
 
 func (a *App) mirrorHandler(w http.ResponseWriter, r *http.Request) {
 	src, file := r.PathValue("src"), r.PathValue("file")
-	ip := clientIP(r, a.cfg.TrustProxy)
-	if !a.lim.allow("dl:"+ip, 60, 10*time.Minute) {
-		writeErr(w, http.StatusTooManyRequests, "too many downloads, try later")
+	if !a.dlAllowed(w, r) {
 		return
 	}
-	a.lim.fail("dl:" + ip)
+	if a.componentMirror(w, r, src, file) {
+		return
+	}
 	// downloads may take a while on first request; detach from the client's
 	// context so a dropped connection does not leave a half-filled cache
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
@@ -206,4 +206,15 @@ func (a *App) fleetLatest(w http.ResponseWriter, r *http.Request, u *User) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"tag": tag, "version": strings.TrimPrefix(tag, "v"), "assets": len(names)})
+}
+
+// dlAllowed limits mirror downloads per client IP.
+func (a *App) dlAllowed(w http.ResponseWriter, r *http.Request) bool {
+	ip := clientIP(r, a.cfg.TrustProxy)
+	if !a.lim.allow("dl:"+ip, 60, 10*time.Minute) {
+		writeErr(w, http.StatusTooManyRequests, "too many downloads, try later")
+		return false
+	}
+	a.lim.fail("dl:" + ip)
+	return true
 }

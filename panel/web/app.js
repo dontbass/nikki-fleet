@@ -55,11 +55,13 @@ function vcmp(a, b){
   return 0;
 }
 let latestP = null, latestAt = 0;
-function latestFleet(){
-  if(!latestP || Date.now() - latestAt > 10*60*1000){ latestAt = Date.now(); latestP = get("/api/fleet/latest").then(d => d.version).catch(() => { latestP = null; return null; }); }
+// latest nikki-fleet / mihomo / zashboard versions (panel asks GitHub, cached)
+function latestAll(){
+  if(!latestP || Date.now() - latestAt > 10*60*1000){ latestAt = Date.now(); latestP = get("/api/latest").then(d => { S.latestAll = d; return d; }).catch(() => { latestP = null; return {}; }); }
   return latestP;
 }
-S.latest = null;
+const latestFleet = () => latestAll().then(d => d.fleet || null);
+S.latest = null; S.latestAll = {};
 const needsUpdate = r => S.latest && r.agent_version && /^\d/.test(r.agent_version) && vcmp(r.agent_version, S.latest) < 0;
 
 function updateDialog(r){
@@ -85,6 +87,35 @@ function updateDialog(r){
         if(S.router?.id === r.id){ S.router = rr; drawOverview(); }
       }else if(Date.now() - t0 > 5*60*1000){ clearInterval(dlg._timer); st("Обновление не завершилось за 5 минут — смотрите журнал выше", "err"); }
     }, 4000);
+  });
+}
+
+// Long-running router job (mihomo core / zashboard update) with a live log
+function jobDialog(r, o){
+  openDialog(`<h2>${esc(o.title)}</h2>
+    <div class="small muted">${o.note}</div>
+    <div class="note small" id="jobState">Запускаю…</div>
+    <pre class="code" id="jobLog" style="max-height:45vh">…</pre>
+    <div class="row end"><button data-close>Закрыть</button></div>`, async () => {
+    const st = (t, cls) => { const e = $("#jobState"); if(e){ e.textContent = t; e.className = "note small " + (cls||""); } };
+    try{
+      const d = await cmd(r.id, o.type, o.args || {});
+      if(!d.ok) return st(/unknown command/.test(d.error||"") ? "Агент на роутере устарел — сначала обновите nikki-fleet" : (d.error || "Не удалось запустить"), "err");
+      st(d.running ? "Уже выполняется…" : "Выполняется… окно можно закрыть, работа продолжится на роутере");
+    }catch(e){ return st(/unknown command|неизвестная команда/.test(e.message) ? "Агент на роутере устарел — сначала обновите nikki-fleet" : e.message, "err"); }
+    const t0 = Date.now(); let seen = false;
+    dlg._timer = setInterval(async () => {
+      if(!$("#jobLog")) return clearInterval(dlg._timer);
+      let l = null; try{ l = await cmd(r.id, "logs.tail", {which:o.which, lines:80}); }catch(e){}
+      if(l?.content){ seen = true; const p = $("#jobLog"); p.textContent = l.content; p.scrollTop = p.scrollHeight; }
+      if(seen && l && l.running === false){
+        clearInterval(dlg._timer);
+        const ok = /готово|уже установлена/.test(l.content || ""), back = /восстановлено/.test(l.content || "");
+        st(ok ? "Готово" : back ? "Не получилось — прежняя версия восстановлена, подробности в журнале" : "Не получилось — подробности в журнале", ok ? "ok" : "err");
+        const s2 = await cmd(r.id, "status", {full:true}).catch(() => null);
+        if(s2 && S.router?.id === r.id){ S.router.status = s2; drawOverview(); }
+      }else if(Date.now() - t0 > 15*60*1000){ clearInterval(dlg._timer); st("Нет результата за 15 минут — смотрите журнал", "err"); }
+    }, 3000);
   });
 }
 
@@ -299,9 +330,27 @@ function drawPill(){
 }
 const canEdit = () => S.router && S.router.role !== "viewer";
 
+function componentsPanel(r, st){
+  const L = S.latestAll || {}, own = r.role === "owner" && r.online, fl = st.flash;
+  const mv = st.mihomo?.version, uv = st.ui?.version;
+  const row = (name, desc, cur, latest, newer, btnId, btnText) => `<div class="comp">
+      <div><b>${name}</b><span class="small muted">${desc}</span></div>
+      <div class="v">${cur ? esc(cur) : `<span class="muted">—</span>`}${latest ? (newer ? ` <span class="pill warn">→ ${esc(latest)}</span>` : ` <span class="muted small">последняя</span>`) : ""}</div>
+      <div>${own && btnId && (newer || !cur) ? `<button class="small${newer ? " primary" : ""}" id="${btnId}">${btnText}</button>` : ""}</div></div>`;
+  const vnew = (a, b) => a && b && /^v?\d/.test(a) && vcmp(a, b) < 0;
+  return `<div class="panel"><div class="spread"><h3>Компоненты</h3>${fl ? `<span class="small muted">флеш: свободно ${bytes(fl.free_kb*1024)} из ${bytes(fl.total_kb*1024)} · ${esc(fl.fs)}</span>` : ""}</div>
+    <div class="comps">
+      ${row("nikki-fleet", "агент и конфигуратор", r.agent_version, L.fleet, vnew(r.agent_version, L.fleet), "cFleet", "Обновить")}
+      ${row("mihomo", "ядро прокси", mv, L.mihomo, vnew(mv, L.mihomo), mv ? "cMihomo" : "", "Обновить ядро")}
+      ${row("zashboard", "веб-панель mihomo", st.ui ? (uv || (st.ui.present ? "установлена" : "")) : "", L.zashboard, uv ? vnew(uv, L.zashboard) : !!(st.ui && L.zashboard), st.ui ? "cUi" : "", uv || st.ui?.present ? "Обновить" : "Установить")}
+    </div>
+    ${st.ui === null && st.nikki ? `<div class="small muted">zashboard: в конфиге не задан external-ui.</div>` : ""}</div>`;
+}
+
 function tabOverview(body){
   body.innerHTML = `<div id="ov"></div>`;
   drawOverview();
+  latestAll().then(() => drawOverview());
   latestFleet().then(v => { if(v && v !== S.latest){ S.latest = v; drawOverview(); } });
 }
 function drawOverview(){
@@ -343,6 +392,7 @@ function drawOverview(){
         <div><b>Соединения</b><span>${st.traffic?.connections ?? "—"}${st.traffic ? ` · <a href="#/r/${r.id}/traffic">куда идёт трафик →</a>` : ""}</span></div>
       </div>
     </div>
+    ${componentsPanel(r, st)}
     <div class="cols">
       <div class="panel"><h3>Группы</h3>
         ${(st.groups||[]).length ? `<div class="tbl"><table><thead><tr><th>Группа</th><th>Тип</th><th>Сейчас</th><th></th></tr></thead><tbody>
@@ -358,6 +408,11 @@ function drawOverview(){
     </div>
     <div class="note small">Полная настройка — на вкладке «Конфигуратор»: подписки, правила, группы и клиенты, с сохранением прямо на роутер.</div>`;
   $("#aUpdate")?.addEventListener("click", () => updateDialog(S.router));
+  $("#cFleet")?.addEventListener("click", () => updateDialog(S.router));
+  $("#cMihomo")?.addEventListener("click", () => jobDialog(S.router, {title:"Обновление ядра mihomo", type:"mihomo.update", args:{version: S.latestAll.mihomo || "latest"}, which:"mihomo",
+    note:`Официальная сборка MetaCubeX ${esc(S.latestAll.mihomo || "")}. Роутер скачает её (с GitHub или через панель) в оперативную память, проверит текущим конфигом и заменит ядро. При малом месте во флеше Nikki остановится на несколько секунд — интернет в это время идёт напрямую. Если новое ядро не запустится, вернётся прежнее.`}));
+  $("#cUi")?.addEventListener("click", () => jobDialog(S.router, {title:"zashboard", type:"ui.update", which:"ui",
+    note:`Веб-панель mihomo <a href="https://github.com/Zephyruso/zashboard" target="_blank" rel="noopener">zashboard</a> ${esc(S.latestAll.zashboard || "")} (сборка без шрифтов, ~5 МБ). Ставится в каталог external-ui Nikki; если места мало, старая версия заменяется, её копия на время держится в памяти.`}));
   $("#aStarter")?.addEventListener("click", () => starterDialog(S.router, {hasProfile:false}));
   $("#aStarter2")?.addEventListener("click", () => starterDialog(S.router, {hasProfile:!!nk.profile?.name}));
   $("#aReload")?.addEventListener("click", async e => {

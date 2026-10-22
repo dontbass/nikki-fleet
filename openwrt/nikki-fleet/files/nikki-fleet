@@ -151,6 +151,14 @@ const COMMANDS = {
 	'traffic': a => ops.traffic(a?.limit),
 	'proxies': a => ops.proxies(),
 	'fleet.update': a => { const c = agent_cfg(); return ops.self_update(c.server, c.insecure); },
+	'mihomo.update': a => {
+		const v = `${a?.version ?? 'latest'}`;
+		if (!match(v, /^(latest|v[0-9][0-9A-Za-z.-]*)$/))
+			return { ok: false, error: 'invalid version' };
+		const c = agent_cfg();
+		return ops.run_job('mihomo', [ v, c.server, c.insecure ? '1' : '0' ]);
+	},
+	'ui.update': a => { const c = agent_cfg(); return ops.run_job('ui', [ c.server, c.insecure ? '1' : '0' ]); },
 	'mihomo.api': a => {
 		if (!api_allowed(a?.method ?? 'GET', `${a?.path}`))
 			return { ok: false, error: 'this API call is not allowed remotely' };
@@ -280,6 +288,8 @@ usage:
   nikki-fleet watchdog                   restore the previous profile if a change was not confirmed
   nikki-fleet doctor                     diagnose the connection to the panel
   nikki-fleet update [panel-url]         upgrade nikki-fleet packages in the background
+  nikki-fleet mihomo-update [vX.Y.Z]     replace the mihomo core with an official release (default: latest)
+  nikki-fleet ui-update                  install/update the zashboard web UI
   nikki-fleet starter <name> <url> [--profile=file.yaml]
                                          create a working profile from the starter template
 `;
@@ -392,6 +402,14 @@ case 'starter': {
 		activate: true, reload: true });
 	out(r);
 	exit(r.ok ? 0 : 2);
+}
+case 'mihomo-update':
+case 'ui-update': {
+	// run in the foreground so the output is visible in the terminal
+	const c = agent_cfg();
+	const script = P.libexec + (args[0] == 'mihomo-update' ? '/mihomo-update.sh' : '/ui-update.sh');
+	const extra = args[0] == 'mihomo-update' ? q(args[1] ?? 'latest') + ' ' : '';
+	exit(system('sh ' + q(script) + ' ' + extra + q(c.server ?? '') + ' ' + (c.insecure ? '1' : '0')));
 }
 case 'update': {
 	const c = agent_cfg();

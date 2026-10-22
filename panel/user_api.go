@@ -332,6 +332,8 @@ var cmdNeed = map[string]string{
 	"traffic":             "viewer",
 	"proxies":             "viewer",
 	"fleet.update":        "owner",
+	"mihomo.update":       "owner",
+	"ui.update":           "owner",
 	"mihomo.api":          "viewer", // non-GET requires editor, checked below
 	"profile.write":       "editor",
 	"backup.restore":      "editor",
@@ -379,6 +381,17 @@ func (a *App) routerCmd(w http.ResponseWriter, r *http.Request, u *User) {
 	if err != nil {
 		writeErr(w, http.StatusGatewayTimeout, "роутер не ответил вовремя")
 		return
+	}
+	// a fresh full status (e.g. after an update) replaces the stored one right away
+	if req.Type == "status" && res.OK && len(res.Data) > 2 {
+		if full, _ := args["full"].(bool); full {
+			a.store.Update(func(s *state) error {
+				if x := s.router(rt.ID); x != nil {
+					x.Status, x.StatusAt = res.Data, time.Now()
+				}
+				return nil
+			})
+		}
 	}
 	if rank(need) >= rank("editor") {
 		a.recordChange(u, rt, req.Type, args, res)

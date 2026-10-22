@@ -186,6 +186,14 @@ dialog{border:none;border-radius:16px;background:var(--panel);color:var(--fg);wi
 dialog::backdrop{background:rgba(23,26,53,.55);backdrop-filter:blur(2px)}
 #dlgBody{display:flex;flex-direction:column;gap:12px}
 
+/* components */
+.comps{display:flex;flex-direction:column}
+.comp{display:grid;grid-template-columns:minmax(150px,1.2fr) minmax(0,1.5fr) auto;gap:4px 14px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
+.comp:first-child{border-top:none}
+.comp>div:first-child{display:flex;flex-direction:column}
+.comp .v{font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+@media (max-width:640px){ .comp{grid-template-columns:minmax(0,1fr) auto} .comp .v{grid-column:1;grid-row:2} .comp>div:last-child{grid-column:2;grid-row:1/3} }
+
 /* quick setup */
 .panel.starter{flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:space-between;background:linear-gradient(100deg,color-mix(in srgb,var(--accent) 10%,var(--panel)),var(--panel));border-left:4px solid var(--accent)}
 .panel.starter h2{margin-bottom:4px}

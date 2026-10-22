@@ -2,12 +2,16 @@
 package main
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 )
@@ -279,5 +283,72 @@ func TestWallpaper(t *testing.T) {
 	c.do("GET", "/api/wallpaper", nil, &info)
 	if info["enabled"] != false {
 		t.Fatalf("disabled wallpaper still enabled: %v", info)
+	}
+}
+
+func TestComponentMirror(t *testing.T) {
+	zipData, err := os.ReadFile("/tmp/zashboard-test.zip")
+	if err != nil {
+		t.Skip("no zashboard zip for the test")
+	}
+	core := []byte("\x1f\x8b fake mihomo gz")
+	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/MetaCubeX/mihomo/releases/latest":
+			http.Redirect(w, r, "/MetaCubeX/mihomo/releases/tag/v1.19.33", http.StatusFound)
+		case "/Zephyruso/zashboard/releases/latest":
+			http.Redirect(w, r, "/Zephyruso/zashboard/releases/tag/v3.29.1", http.StatusFound)
+		case "/MetaCubeX/mihomo/releases/download/v1.19.33/mihomo-linux-arm64-v1.19.33.gz":
+			w.Write(core)
+		case "/Zephyruso/zashboard/releases/download/v3.29.1/dist-no-fonts.zip":
+			w.Write(zipData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer gh.Close()
+	old := ghBase
+	ghBase = gh.URL
+	defer func() { ghBase = old }()
+	_, srv := testApp(t)
+	c := newClient(t, srv)
+
+	var lt map[string]string
+	c.do("GET", "/dl/mihomo/latest.json", nil, &lt)
+	if lt["tag"] != "v1.19.33" {
+		t.Fatalf("mihomo latest: %v", lt)
+	}
+	resp, _ := http.Get(srv.URL + "/dl/mihomo/v1.19.33/mihomo-linux-arm64-v1.19.33.gz")
+	b, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || !bytes.Equal(b, core) {
+		t.Fatalf("mihomo mirror: %d %q", resp.StatusCode, b)
+	}
+	for _, bad := range []string{"/dl/mihomo/v1.19.33/../x.gz", "/dl/mihomo/v1.19.33/mihomo-linux-arm64-v1.19.32.gz", "/dl/mihomo/latest/mihomo-linux-arm64-v1.19.33.gz"} {
+		if r, _ := http.Get(srv.URL + bad); r.StatusCode == 200 {
+			t.Fatalf("%s must be rejected", bad)
+		}
+	}
+
+	resp, _ = http.Get(srv.URL + "/dl/zashboard/dist.tar.gz")
+	if resp.StatusCode != 200 || resp.Header.Get("X-Zashboard-Version") != "v3.29.1" {
+		t.Fatalf("zashboard: %d", resp.StatusCode)
+	}
+	gz, err := gzip.NewReader(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr := tar.NewReader(gz)
+	seen := map[string]bool{}
+	for {
+		h, err := tr.Next()
+		if err != nil {
+			break
+		}
+		seen[h.Name] = true
+	}
+	resp.Body.Close()
+	if !seen["index.html"] || len(seen) < 10 {
+		t.Fatalf("repacked archive: %v", seen)
 	}
 }

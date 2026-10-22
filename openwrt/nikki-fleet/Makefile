@@ -2,7 +2,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=nikki-fleet
-PKG_VERSION:=0.1.14
+PKG_VERSION:=0.1.15
 PKG_RELEASE:=1
 
 PKG_LICENSE:=GPL-3.0-or-later
@@ -36,10 +36,12 @@ define Build/Compile
 endef
 
 define Package/nikki-fleet/install
-	$(INSTALL_DIR) $(1)/usr/bin $(1)/usr/share/ucode/nikki_fleet $(1)/usr/share/nikki-fleet $(1)/etc/init.d $(1)/etc/config
+	$(INSTALL_DIR) $(1)/usr/bin $(1)/usr/share/ucode/nikki_fleet $(1)/usr/share/nikki-fleet $(1)/usr/libexec/nikki-fleet $(1)/etc/init.d $(1)/etc/config
 	$(INSTALL_BIN) ./files/nikki-fleet $(1)/usr/bin/nikki-fleet
 	$(INSTALL_DATA) ./files/ucode/nikki_fleet/ops.uc $(1)/usr/share/ucode/nikki_fleet/ops.uc
 	$(INSTALL_DATA) ./files/starter.yaml $(1)/usr/share/nikki-fleet/starter.yaml
+	$(INSTALL_BIN) ./files/mihomo-update.sh $(1)/usr/libexec/nikki-fleet/mihomo-update.sh
+	$(INSTALL_BIN) ./files/ui-update.sh $(1)/usr/libexec/nikki-fleet/ui-update.sh
 	$(INSTALL_BIN) ./files/nikki-fleet.init $(1)/etc/init.d/nikki-fleet
 	$(INSTALL_CONF) ./files/nikki-fleet.conf $(1)/etc/config/nikki-fleet
 endef

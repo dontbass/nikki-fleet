@@ -80,6 +80,7 @@ Authorization: Bearer <token>
 | `traffic` | просмотр | `limit` — сводка `/connections`: самые активные соединения (по умолчанию 300) с нужными полями и имена устройств из DHCP |
 | `proxies` | просмотр | — сжатый `/proxies` + `/providers/proxies`: группы в порядке конфига, тип, UDP и последняя задержка узлов, подписки |
 | `fleet.update` | владелец | — запускает в фоне установщик панели (`/install.sh`), который обновляет пакеты nikki-fleet; журнал — `logs.tail which=update` |
+| `mihomo.update`, `ui.update` | владелец | `version` — фоновые задания `/usr/libexec/nikki-fleet/mihomo-update.sh` и `ui-update.sh`; журнал — `logs.tail which=mihomo|ui` |
 | `mihomo.api` GET | просмотр | `method`, `path`, `body` |
 | `mihomo.api` другие методы | редактор | |
 | `profile.write`, `backup.restore`, `nikki.reload`, `subscription.update` | редактор | |
@@ -107,7 +108,11 @@ Authorization: Bearer <token>
 
 - `GET /dl/nikki-fleet/assets.json` — список пакетов последнего релиза nikki-fleet;
 - `GET /dl/nikki-fleet/<файл>` — пакет nikki-fleet из последнего релиза;
-- `GET /dl/nikki/nikki_<arch>-<branch>.tar.gz` — архив пакетов Nikki из его релиза на GitHub.
+- `GET /dl/nikki/nikki_<arch>-<branch>.tar.gz` — архив пакетов Nikki из его релиза на GitHub;
+- `GET /dl/mihomo/latest.json`, `GET /dl/mihomo/<tag>/mihomo-linux-<arch>-<tag>.gz` — ядро mihomo из релизов MetaCubeX;
+- `GET /dl/zashboard/latest.json`, `GET /dl/zashboard/dist.tar.gz` — zashboard, перепакованный из .zip в .tar.gz (в busybox обычно нет unzip).
+
+Адрес GitHub для этих загрузок можно заменить зеркалом: `NF_GITHUB=https://…`.
 
 Разрешён только фиксированный набор имён файлов (не открытый прокси), файлы кэшируются в `<data>/mirror`, есть ограничение запросов с одного IP. Установщик пробует источники по порядку: официальный репозиторий Nikki → релиз на GitHub → панель.
 
@@ -116,3 +121,13 @@ Authorization: Bearer <token>
 - Шаблоны конфигов и рассылка изменений на группу роутеров.
 - Уведомления в Telegram: роутер офлайн, подписка заканчивается, автооткат.
 - Опциональный SQL-бэкенд для больших инсталляций.
+
+## Обновление ядра mihomo на маленьком флеше
+
+`mihomo-update.sh` (запускается агентом в фоне):
+
+1. Размер релиза узнаётся заранее; если в RAM не поместится распакованное ядро (~2,9× .gz) + 16 МБ, обновление не начинается.
+2. Ядро скачивается и сразу распаковывается в `/tmp` (GitHub → панель), должно назвать нужную версию и принять текущий конфиг (`mihomo -t`).
+3. Копия текущего ядра для отката: gzip в RAM, если хватает памяти; иначе откат повторной загрузкой той же версии.
+4. Флеш: если места хватает на второе ядро — запись рядом и `mv` без остановки; если нет, но хватает с учётом освобождаемого старого — Nikki останавливается (трафик идёт напрямую), ядро перезаписывается на месте; иначе — отказ с понятным сообщением. На ubifs/jffs2 учитывается сжатие.
+5. Nikki запускается, API должен ответить новой версией за 60 с; иначе прежнее ядро восстанавливается.

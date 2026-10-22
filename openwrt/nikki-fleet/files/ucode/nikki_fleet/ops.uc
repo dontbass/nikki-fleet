@@ -5,7 +5,7 @@
 
 import { readfile, writefile, popen, stat, lsdir, mkdir, unlink, rename } from 'fs';
 
-export const VERSION = '0.1.14';
+export const VERSION = '0.1.15';
 
 // NF_ROOT lets tests run against a fake filesystem root.
 const ROOT = getenv('NF_ROOT') ?? '';
@@ -23,6 +23,8 @@ export const P = {
 	logs: [ROOT + '/var/log/nikki', ROOT + '/tmp/log/nikki'],
 	uci_conf: ROOT ? ROOT + '/etc/config' : null,
 	starter: ROOT + '/usr/share/nikki-fleet/starter.yaml',
+	libexec: getenv('NF_LIBEXEC') ?? (ROOT + '/usr/libexec/nikki-fleet'),
+	runcfg_dir: ROOT + '/etc/nikki/run',
 };
 
 const MIHOMO = getenv('NF_MIHOMO') ?? 'mihomo';
@@ -288,12 +290,44 @@ function update_running() {
 	return pid != '' && stat('/proc/' + pid) != null;
 }
 
+/* background jobs (mihomo / UI updates): detached, one log and pid file each */
+const JOBS = { mihomo: 'mihomo-update.sh', ui: 'ui-update.sh' };
+const job_log = n => ROOT + '/tmp/nikki-fleet-' + n + '.log';
+const job_pid = n => ROOT + '/tmp/nikki-fleet-' + n + '.pid';
+
+function job_running(name) {
+	const pid = trim(readfile(job_pid(name)) ?? '');
+	return pid != '' && stat('/proc/' + pid) != null;
+}
+
+export function run_job(name, args) {
+	if (!JOBS[name])
+		return { ok: false, error: 'unknown job' };
+	if (job_running(name))
+		return { ok: true, started: false, running: true, message: 'already running' };
+	for (let n in keys(JOBS))
+		if (job_running(n))
+			return { ok: false, error: 'another update is running: ' + n };
+	let cmd = 'sh ' + q(P.libexec + '/' + JOBS[name]);
+	for (let a in (args ?? []))
+		cmd += ' ' + q(`${a}`);
+	// detached: own session if possible, output to the log, pid recorded by the shell
+	const r = sh('S=; command -v setsid >/dev/null 2>&1 && S=setsid; ( $S sh -c ' + q('echo $$ > ' + q(job_pid(name)) + '; exec ' + cmd) +
+		' </dev/null >' + q(job_log(name)) + ' 2>&1 & )');
+	return { ok: r.code == 0, started: r.code == 0 };
+};
+
 export function logs_tail(which, lines) {
 	lines = clamp(int(lines ?? 100), 1, 1000);
 	if (which == 'update') {
 		if (!stat(UPDATE_LOG))
 			return { ok: false, content: '' };
 		return { ok: true, content: sh('tail -n ' + lines + ' ' + q(UPDATE_LOG)).out, running: update_running() };
+	}
+	if (JOBS[which]) {
+		if (!stat(job_log(which)))
+			return { ok: false, content: '' };
+		return { ok: true, content: sh('tail -n ' + lines + ' ' + q(job_log(which))).out, running: job_running(which) };
 	}
 	const file = (which == 'app' ? 'app' : 'core') + '.log';
 	for (let d in P.logs) {
@@ -648,6 +682,29 @@ function status_details(out) {
 		out.traffic = { up: cn.data?.uploadTotal, down: cn.data?.downloadTotal, connections: length(cn.data?.connections ?? []) };
 }
 
+// free flash for updates: the overlay (or / without one) and its filesystem
+function flash_info() {
+	let fs = null;
+	for (let line in split(readfile('/proc/mounts') ?? '', '\n')) {
+		const f = split(line, ' ');
+		if (f[1] == '/overlay')
+			fs = f[2];
+	}
+	const r = sh('df -k ' + (fs ? '/overlay' : '/') + ' | awk \'NR==2 {print $2, $4}\'');
+	const n = split(trim(r.out), ' ');
+	return { fs: fs ?? 'rootfs', total_kb: int(n[0] ?? 0), free_kb: int(n[1] ?? 0) };
+}
+
+// installed zashboard (marker written by ui-update.sh)
+function ui_info() {
+	const k = yaml_top_scalars(readfile(P.runcfg), [ 'external-ui' ]);
+	const ui = k['external-ui'];
+	if (!ui)
+		return null;
+	const dir = substr(ui, 0, 1) == '/' ? ROOT + ui : P.runcfg_dir + '/' + replace(ui, /^\.\//, '');
+	return { path: ui, version: trim(readfile(dir + '/.zashboard-version') ?? '') || null, present: stat(dir + '/index.html') != null };
+}
+
 export function status(full) {
 	const up = split(readfile('/proc/uptime') ?? '0', ' ');
 	const la = split(readfile('/proc/loadavg') ?? '', ' ');
@@ -666,6 +723,8 @@ export function status(full) {
 			luci_version: pkg_version('luci-app-nikki'),
 		},
 		time: time(),
+		flash: flash_info(),
+		ui: ui_info(),
 	};
 	if (type(out.nikki.profile) == 'object')
 		delete out.nikki.profile.path;
