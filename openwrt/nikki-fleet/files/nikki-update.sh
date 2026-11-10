@@ -30,7 +30,24 @@ CURL="curl -fsSL --connect-timeout 15 --retry 2 -y 30 -Y 10240"
 [ "$INSECURE" = 1 ] && CURL="$CURL -k"
 
 log() { echo "[$(date +%H:%M:%S)] $*"; }
-cleanup() { rm -rf "$W"; }
+# Package lists of configured feeds are hidden while installing: otherwise opkg
+# may pick a feed's copy of a package (same version) over the local file and try
+# to download it from a blocked feed. Only the checked local files are used.
+LISTS=""; LISTS_HIDDEN=""
+hide_lists() {
+	[ "$PM" = opkg ] || return 0
+	LISTS="$(awk '$1 == "lists_dir" {print $3; exit}' "$R/etc/opkg.conf" 2>/dev/null)"; LISTS="$R${LISTS:-/var/opkg-lists}"
+	[ -d "$LISTS" ] || return 0
+	LISTS_HIDDEN="$LISTS.nikki-fleet"; rm -rf "$LISTS_HIDDEN"
+	mv "$LISTS" "$LISTS_HIDDEN" && mkdir -p "$LISTS" || LISTS_HIDDEN=""
+}
+restore_lists() {
+	[ -n "$LISTS_HIDDEN" ] && [ -d "$LISTS_HIDDEN" ] || return 0
+	rm -rf "$LISTS"; mv "$LISTS_HIDDEN" "$LISTS"; LISTS_HIDDEN=""
+}
+cleanup() { restore_lists; rm -rf "$W"; }
+trap 'restore_lists' EXIT
+trap 'restore_lists; exit 1' INT TERM
 die() { log "ОШИБКА: $*"; cleanup; exit 1; }
 
 api_ok() { "$CLI" api GET /version 2>/dev/null | grep -q '"version"'; }
@@ -120,11 +137,12 @@ NEED_KB=$((SUM_KB * 4 + 1024))
 # dry run: dependencies and conflicts are found here, before anything changes
 if [ "$PM" = opkg ]; then
 	# opkg's exit status also counts kept conffiles as errors: judge by the messages
+	hide_lists
 	opkg install --noaction $FILES > "$W/dry.log" 2>&1; rc=0
 	out="$(cat "$W/dry.log")"
 	{ [ -n "$(opkg_errors "$W/dry.log")" ] || grep -qiE "cannot satisfy|incompatible|cannot find dependency" "$W/dry.log"; } && rc=1
 else
-	out="$(apk add --simulate --allow-untrusted $FILES 2>&1)"; rc=$?
+	out="$(apk add --simulate --no-network --allow-untrusted $FILES 2>&1)"; rc=$?
 fi
 if [ "$rc" != 0 ]; then
 	echo "$out" | tail -n 8
@@ -134,7 +152,8 @@ log "проверочная установка прошла"
 
 # --- backup -------------------------------------------------------------------
 ENABLED=0; nikki_enabled && ENABLED=1
-ls -1 "$R"/etc/config/*-opkg "$R"/etc/config/*.apk-new 2>/dev/null > "$W/opkg-before"
+newconf() { find "$R/etc/config" "$R/etc/nikki" -maxdepth 2 \( -name '*-opkg' -o -name '*.apk-new' \) 2>/dev/null | sort; }
+newconf > "$W/opkg-before"
 : > "$W/old.list"
 for p in $TODO; do pkg_files "$p" >> "$W/old.list"; done
 {
@@ -158,7 +177,7 @@ rollback() {
 	sort -u "$W/old.list" > "$W/a"; sort -u "$W/new.list" > "$W/b"
 	if [ -s "$W/a" ]; then grep -vxF -f "$W/a" "$W/b"; else cat "$W/b"; fi | while read -r f; do [ -f "$R$f" ] && rm -f "$R$f"; done
 	# new-default conffiles (*-opkg) this attempt left behind
-	ls -1 "$R"/etc/config/*-opkg "$R"/etc/config/*.apk-new 2>/dev/null | grep -vxF -f "$W/opkg-before" | while read -r f; do rm -f "$f"; done
+	newconf | grep -vxF -f "$W/opkg-before" | while read -r f; do rm -f "$f"; done
 	if tar -xzf "$W/backup.tgz" -C "$R/"; then
 		rm -f "$R"/tmp/luci-indexcache* "$R"/tmp/luci-modulecache/* 2>/dev/null
 		[ -x "$R/etc/init.d/rpcd" ] && "$R/etc/init.d/rpcd" reload >/dev/null 2>&1
@@ -174,9 +193,9 @@ log "устанавливаю"
 if [ "$PM" = opkg ]; then
 	opkg install $FILES > "$W/install.log" 2>&1; rc=0
 	{ [ -n "$(opkg_errors "$W/install.log")" ] || grep -qiE "cannot satisfy" "$W/install.log"; } && rc=1
-	grep -q resolve_conffiles "$W/install.log" && log "ваши настройки сохранены; новые настройки по умолчанию лежат рядом (/etc/config/nikki-opkg)"
+	grep -q resolve_conffiles "$W/install.log" && log "ваши настройки сохранены; новые значения по умолчанию лежат рядом: $(newconf | grep -vxF -f "$W/opkg-before" | sed "s#^$R##" | tr '\n' ' ')"
 else
-	apk add --allow-untrusted $FILES > "$W/install.log" 2>&1; rc=$?
+	apk add --no-network --allow-untrusted $FILES > "$W/install.log" 2>&1; rc=$?
 fi
 tail -n 6 "$W/install.log"
 if [ "$rc" != 0 ] || [ "$(iv nikki)" != "$NEW" ]; then
