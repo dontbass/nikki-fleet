@@ -71,6 +71,10 @@ code{font-family:var(--f-mono);font-size:.92em}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;min-width:0}
 .lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
 .bulk{flex-direction:row;flex-wrap:wrap;align-items:end;gap:8px}
+.quick{flex-direction:row;flex-wrap:wrap;align-items:center;gap:8px;border-left:3px solid var(--accent)}
+.quick .lbl{width:100%}
+.quick #qaUrl{flex:1 1 280px}
+.prov.fresh{box-shadow:0 0 0 2px var(--accent);transition:box-shadow .3s}
 .bulk .lbl{width:100%}
 
 .prov{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;min-width:0}
@@ -620,7 +624,7 @@ function load(text, name){
     const extra = {...p};
     ["url","path","interval","exclude-filter","header"].forEach(k=>delete extra[k]);
     return {
-      id:uid(), name:n, enabled:true, url:p.url||"", path:p.path||`./${n.toLowerCase()}.yaml`, interval:p.interval ?? 3600,
+      id:uid(), name:n, savedName:n, enabled:true, url:p.url||"", path:p.path||`./${n.toLowerCase()}.yaml`, interval:p.interval ?? 3600,
       exclude:p["exclude-filter"]||"", hdr, extraHdr:h, extra,
       groups:new Set(groupsS.filter(g=>Array.isArray(g.data.use)&&g.data.use.includes(n)).map(g=>g.data.name)),
       nodes: nodesCache[p.url] || null, open:false, live:null,
@@ -843,6 +847,12 @@ function nodesBlock(p){
 function renderSubs(){
   const cands = useCandidates();
   $("#main").innerHTML = `
+    <div class="panel quick">
+      <div class="lbl">Новая подписка в один клик</div>
+      <input type="text" id="qaUrl" class="mono" placeholder="Вставьте ссылку подписки (Ctrl+V) — подписка, группы и правила добавятся сами" spellcheck="false" autocomplete="off" inputmode="url">
+      <button id="qaPaste" class="primary" title="Взять ссылку из буфера обмена">Вставить из буфера</button>
+      <div class="small muted" style="width:100%">Группы создаются по образцу уже имеющихся (${(() => { const k = [...subPatterns().keys()]; return k.length ? k.map(x => esc(x.replace("{N}", "<имя>"))).join(", ") : "&lt;имя&gt;-Best и &lt;имя&gt;-Manual"; })()}), заголовки устройства и проверка узлов — как у последней подписки. Можно вставить сразу несколько ссылок.</div>
+    </div>
     <div class="panel bulk">
       <div class="lbl">Устройство для всех подписок</div>
       <label class="f" style="flex:1 1 180px"><span>Пресет</span><select id="bulkPreset">${presetOptions("")}</select></label>
@@ -898,6 +908,151 @@ function addProv(){
   applyPreset(p, "router");
   provs.push(p); render();
   setTimeout(()=>document.getElementById("u-"+p.id)?.focus(),0);
+}
+/* ---------- one-click subscription: provider + groups + rules by analogy ---------- */
+const SUB_SKIP = new Set(["www","sub","subs","api","cdn","s","x","xo","vpn","panel","link","get","my","app","go","url"]);
+// name from the link: the meaningful part of the host (xo.e0f.cx → e0f, carparts36.ru → carparts36)
+function subNameFromUrl(u){
+  let host = "";
+  try{ host = new URL(u).hostname; }catch(e){}
+  let base = "";
+  if(/^\d+\.\d+\.\d+\.\d+$/.test(host)) base = "sub" + host.split(".").pop();
+  else {
+    const parts = host.split(".").filter(Boolean);
+    const cand = parts.slice(0, -1).reverse().find(x => !SUB_SKIP.has(x.toLowerCase()) && x.length > 1);
+    base = cand || parts[0] || "sub";
+  }
+  base = base.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 24) || "sub";
+  const taken = n => provs.some(p=>p.name.toLowerCase()===n.toLowerCase()) || groupNames().some(g=>g.toLowerCase()===n.toLowerCase()) || BUILTIN.includes(n);
+  let n = base, i = 2;
+  while(taken(n)) n = base + (i++);
+  return n;
+}
+// Groups named after a subscription ("EOF-Best", "EOF-Manual") form patterns ("{N}-Best"):
+// the new subscription gets the same set, with the same settings and shared providers.
+function subPatterns(){
+  const pats = new Map();
+  for(const p of provs){
+    const pn = p.name.trim(); if(!pn) continue;
+    for(const g of groupsS){
+      const gn = g.data.name, i = gn.toLowerCase().indexOf(pn.toLowerCase());
+      if(i < 0 || !p.groups.has(gn)) continue;
+      const key = gn.slice(0, i) + "{N}" + gn.slice(i + pn.length);
+      if(key === "{N}") continue;
+      // the longest provider name wins (SilVPN vs VPN)
+      const cur = [...pats.values()].flat().find(x => x.group === g);
+      if(cur){ if(cur.prov.name.length >= pn.length) continue; const arr = pats.get(cur.key); arr.splice(arr.indexOf(cur), 1); }
+      if(!pats.has(key)) pats.set(key, []);
+      pats.get(key).push({key, prov:p, group:g});
+    }
+  }
+  for(const [k, v] of pats) if(!v.length) pats.delete(k);
+  return pats;
+}
+const linkRe = /\bhttps?:\/\/[^\s"'<>]+/g;
+
+function quickAddText(text){
+  const urls = [...new Set((String(text||"").match(linkRe) || []).map(u => u.replace(/[),.;]+$/, "")))];
+  if(!urls.length){ flash("В тексте нет ссылки https://…", true); return; }
+  const known = new Set(provs.map(p=>p.url));
+  const fresh = urls.filter(u => !known.has(u));
+  if(!fresh.length){ flash(urls.length > 1 ? "Эти подписки уже есть" : "Эта подписка уже есть", true); return; }
+  pushUndo();
+  const done = fresh.map(u => quickAddOne(u));
+  render();
+  const last = done[done.length - 1];
+  const sec = document.querySelector(`.prov[data-id="${last.p.id}"]`);
+  if(sec){ sec.classList.add("fresh"); sec.scrollIntoView({block:"center", behavior:"smooth"}); const ni = document.getElementById("n-"+last.p.id); if(ni){ ni.focus(); ni.select(); } }
+  flash(done.length > 1 ? `Добавлено подписок: ${done.length}` :
+    `«${last.p.name}»: ${last.groups.length ? "группы " + last.groups.join(", ") : "без новых групп"}${last.parents.length ? " → в " + last.parents.join(", ") : ""}${last.rules ? `, правил: ${last.rules}` : ""}. Имя можно поменять — группы переименуются следом.`);
+}
+
+function quickAddOne(url){
+  const name = subNameFromUrl(url);
+  const pats = subPatterns();
+  // template provider: the most recent one that has its own groups, else the last one
+  const owners = [...pats.values()].flat().map(x => x.prov);
+  const tpl = owners.length ? owners[owners.length - 1] : provs[provs.length - 1];
+  let path = `./providers/${name.toLowerCase()}.yaml`;
+  if(tpl){ const tp = tpl.path || "", tn = tpl.name.toLowerCase(), i = tp.toLowerCase().lastIndexOf(tn);
+    if(i >= 0) path = tp.slice(0, i) + name.toLowerCase() + tp.slice(i + tn.length); }
+  const p = {
+    id:uid(), name, savedName:name, enabled:true, url, path, interval:tpl ? tpl.interval : 86400, exclude:"",
+    hdr: tpl ? clone(tpl.hdr) : {ua:"",hwid:"",os:"",ver:"",model:""}, extraHdr: tpl ? clone(tpl.extraHdr) : {},
+    extra: tpl ? clone(tpl.extra) : {type:"http",
+      "health-check":{enable:true,url:"http://www.msftconnecttest.com/connecttest.txt",interval:600,timeout:5000,"expected-status":200},
+      override:{"skip-cert-verify":true}},
+    groups:new Set(), nodes:null, open:false, live:null,
+  };
+  if(!tpl) applyPreset(p, "router");
+  // right after the last subscription that has its own groups, so shared ones stay last in `use`
+  const lastOwner = owners.length ? owners.reduce((a, b) => provs.indexOf(b) > provs.indexOf(a) ? b : a) : null;
+  if(lastOwner) provs.splice(provs.indexOf(lastOwner) + 1, 0, p); else provs.push(p);
+
+  const created = [], parents = new Set(); let ruleCount = 0;
+  const addAfter = (arr, afterIdx, val) => arr.splice(afterIdx + 1, 0, val);
+  if(pats.size){
+    for(const [key, inst] of pats){
+      const rep = inst[inst.length - 1], gname = key.replace("{N}", name);
+      if(groupNames().includes(gname)) continue;
+      const data = clone(rep.group.data); data.name = gname; delete data.use;
+      // drop node pins that belonged to the other subscription
+      if(Array.isArray(data.proxies)) data.proxies = data.proxies.filter(x => BUILTIN.includes(x) || groupNames().includes(x));
+      const lastIdx = Math.max(...inst.map(x => groupsS.indexOf(x.group)));
+      addAfter(groupsS, lastIdx, {id:uid(), data});
+      p.groups.add(gname); created.push(gname);
+      // providers shared by every group of this pattern (e.g. a backup subscription in all of them)
+      for(const sp of provs) if(sp !== p && !inst.some(x => x.prov === sp) && inst.every(x => sp.groups.has(x.group.data.name))) sp.groups.add(gname);
+      // parent groups that list the pattern's groups get the new one after the last of them
+      const names = inst.map(x => x.group.data.name);
+      for(const g of groupsS){
+        const px = g.data.proxies; if(!Array.isArray(px) || g.data.name === gname) continue;
+        const idx = px.reduce((m, x, i) => names.includes(x) ? i : m, -1);
+        if(idx >= 0 && !px.includes(gname)){ addAfter(px, idx, gname); parents.add(g.data.name); }
+      }
+      // rules repeated for every subscription of the pattern are repeated for the new one too
+      const byKey = new Map();
+      rules.forEach((r, i) => { if(names.includes(r.target)){ const k = [r.type, r.value, ...r.opts].join("\u0001"); if(!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(i); } });
+      for(const [k, idxs] of [...byKey].reverse()){
+        if(idxs.length < names.length) continue;
+        const src = rules[idxs[idxs.length - 1]];
+        rules.splice(idxs[idxs.length - 1] + 1, 0, {id:uid(), type:src.type, value:src.value, target:gname, opts:[...src.opts]});
+        ruleCount++;
+      }
+    }
+  } else {
+    // nothing to copy from: the classic pair, both offered in the main selector
+    const hc = p.extra["health-check"]?.url || "http://www.msftconnecttest.com/connecttest.txt";
+    const mk = [ {name:`${name}-Best`, type:"url-test", url:hc, interval:300, tolerance:50}, {name:`${name}-Manual`, type:"select"} ];
+    for(const d of mk) if(!groupNames().includes(d.name)){ groupsS.push({id:uid(), data:d}); p.groups.add(d.name); created.push(d.name); }
+    // main selector: the select group most rules point to (or named Proxy)
+    const cnt = {}; rules.forEach(r => cnt[r.target] = (cnt[r.target]||0) + 1);
+    const sel = groupsS.filter(g => g.data.type === "select" && !created.includes(g.data.name));
+    const mainG = sel.find(g => /^proxy$/i.test(g.data.name)) || sel.sort((a,b) => (cnt[b.data.name]||0) - (cnt[a.data.name]||0))[0];
+    if(mainG){
+      const px = mainG.data.proxies = Array.isArray(mainG.data.proxies) ? mainG.data.proxies : [];
+      const di = px.indexOf("DIRECT");
+      px.splice(di >= 0 ? di : px.length, 0, ...created.filter(x => !px.includes(x)));
+      parents.add(mainG.data.name);
+    } else {
+      groupsS.unshift({id:uid(), data:{name:"Proxy", type:"select", proxies:[...created, "DIRECT"]}});
+      parents.add("Proxy");
+    }
+  }
+  return {p, groups:created, parents:[...parents], rules:ruleCount};
+}
+
+// renaming a subscription renames the groups named after it (EOF-Best → New-Best)
+function renameSubGroups(p){
+  const old = p.savedName, nn = p.name.trim();
+  p.savedName = nn;
+  if(!old || !nn || old === nn) return 0;
+  let n = 0;
+  for(const g of groupsS){
+    const gn = g.data.name;
+    if(p.groups.has(gn) && gn.includes(old) && renameGroup(g, gn.split(old).join(nn))) n++;
+  }
+  return n;
 }
 function curlCmd(p){
   const q = s => `'${String(s).replace(/'/g,"'\\''")}'`;
@@ -1577,6 +1732,7 @@ main.addEventListener("change", e => {
   const p = t.closest(".prov[data-id]") && byProv(t);
   if(p){
     if(t.dataset.k==="enabled"){ pushUndo(); p.enabled = t.checked; render(); }
+    if(t.dataset.k==="name"){ const n = renameSubGroups(p); if(n){ render(); flash(`Переименовано групп: ${n}`); } }
     if(t.dataset.act==="preset" && t.value){ pushUndo(); applyPreset(p, t.value); render(); }
     return;
   }
@@ -1624,11 +1780,31 @@ main.addEventListener("change", e => {
   }
 });
 
+// one-click subscription: paste into the quick field, Enter in it, or paste anywhere on the tab
+main.addEventListener("paste", e => {
+  if(e.target.id !== "qaUrl") return;
+  const t = e.clipboardData?.getData("text") || "";
+  if(!/https?:\/\//.test(t)) return;
+  e.preventDefault(); quickAddText(t);
+});
+main.addEventListener("keydown", e => {
+  if(e.target.id === "qaUrl" && e.key === "Enter"){ e.preventDefault(); quickAddText(e.target.value); }
+});
+document.addEventListener("paste", e => {
+  if(ui.tab !== "subs" || e.target.closest?.("input,textarea,select,[contenteditable]")) return;
+  const t = e.clipboardData?.getData("text") || "";
+  if(/https?:\/\//.test(t)){ e.preventDefault(); quickAddText(t); }
+});
 main.addEventListener("click", async e => {
   const b = e.target.closest("button"); if(!b) return;
   // toolbar buttons by id
   switch(b.id){
     case "addProv": return addProv();
+    case "qaPaste": {
+      try{ const t = await navigator.clipboard.readText(); if(t.trim()) return quickAddText(t); flash("Буфер обмена пуст", true); }
+      catch(err){ const i = $("#qaUrl"); i?.focus(); flash("Браузер не дал прочитать буфер — нажмите Ctrl+V в поле", true); }
+      return;
+    }
     case "rConnect": b.disabled = true; b.textContent = "Подключаюсь…"; return connect(false);
     case "rRefresh": return refreshLive(false).catch(e=>flash(apiErr(e), true));
     case "rUpdAll": {
