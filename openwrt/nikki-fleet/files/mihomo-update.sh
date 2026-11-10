@@ -6,7 +6,10 @@
 #   mihomo-update.sh <version|latest> [panel-url] [insecure]
 #
 # 1. The release is streamed through gunzip into RAM (/tmp); it must report the
-#    expected version and accept the current config (mihomo -t).
+#    expected version and accept the current config (mihomo -t). If RAM is short
+#    while the old core runs, Nikki is stopped first (the core's memory is freed,
+#    internet goes direct); if even that is not enough, the new core is written
+#    straight over the old one on flash and checked there.
 # 2. Plenty of flash: new file next to the old one + rename, no downtime.
 #    Little flash: Nikki is stopped (traffic goes direct, internet stays up),
 #    the old binary is overwritten in place, Nikki is started again.
@@ -28,7 +31,28 @@ GH="${NF_GH:-https://github.com/MetaCubeX/mihomo}"
 
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 cleanup() { rm -rf "$W"; }
-die() { log "ОШИБКА: $*"; cleanup; exit 1; }
+STOPPED=0
+die() {
+	log "ОШИБКА: $*"
+	cleanup
+	[ "$STOPPED" = 1 ] && "$BIN" -v >/dev/null 2>&1 && { log "запускаю Nikki обратно"; "$INIT" start >/dev/null 2>&1; }
+	exit 1
+}
+stop_nikki() {
+	[ "$ENABLED" = 1 ] && [ "$STOPPED" = 0 ] || return 0
+	log "останавливаю Nikki — интернет на это время идёт напрямую"
+	"$INIT" stop >/dev/null 2>&1; STOPPED=1; sleep 2
+}
+mem_kb() { echo "${NF_MEM_KB:-$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)}"; }
+# RAM held by the running core: freed when Nikki is stopped
+core_rss_kb() {
+	[ -n "${NF_RSS_KB:-}" ] && { echo "$NF_RSS_KB"; return; }
+	t=0
+	for pid in $(pidof mihomo 2>/dev/null); do
+		r="$(awk '/^VmRSS:/ {print $2}' "/proc/$pid/status" 2>/dev/null)"; t=$((t + ${r:-0}))
+	done
+	echo "$t"
+}
 kb() { du -k "$1" 2>/dev/null | awk '{print $1}'; }
 CURL="curl -fsSL --connect-timeout 15 --retry 2"
 [ "$INSECURE" = 1 ] && CURL="$CURL -k"
@@ -66,20 +90,22 @@ arch_asset() {
 	esac
 }
 
-# fetch_core <version> <out-file> [ram-check]: GitHub first, then the panel's mirror; gunzip on the fly.
-# With ram-check the download size is probed first: the unpacked core is ~2.8x the .gz.
+# probe_core <version>: size of the release .gz (GZ_KB) from GitHub or the panel's mirror
+probe_core() {
+	name="mihomo-linux-$ARCH-$1.gz"
+	for url in "$GH/releases/download/$1/$name" ${PANEL:+"$PANEL/dl/mihomo/$1/$name"}; do
+		GZ_KB="$($CURL -I "$url" 2>/dev/null | tr -d '\r' | awk 'tolower($1)=="content-length:" {n=$2} END {print int(n/1024)}')"
+		[ "${GZ_KB:-0}" -gt 1024 ] && return 0
+		log "недоступно: $url"
+	done
+	return 1
+}
+
+# fetch_core <version> <out-file>: GitHub first, then the panel's mirror; gunzip on the fly
 fetch_core() {
 	name="mihomo-linux-$ARCH-$1.gz"
-	[ -n "${3:-}" ] || GZ_KB=""
 	for url in "$GH/releases/download/$1/$name" ${PANEL:+"$PANEL/dl/mihomo/$1/$name"}; do
-		if [ -n "${3:-}" ]; then
-			GZ_KB="$($CURL -I "$url" 2>/dev/null | tr -d '\r' | awk 'tolower($1)=="content-length:" {n=$2} END {print int(n/1024)}')"
-			[ "${GZ_KB:-0}" -gt 1024 ] || { log "недоступно: $url"; continue; }
-			mem="${NF_MEM_KB:-$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)}"
-			need=$((GZ_KB * 29 / 10 + 16384))
-			[ "$mem" -ge "$need" ] || die "мало оперативной памяти: ядро займёт около $((GZ_KB * 29 / 10240)) МБ в /tmp, свободно $((mem / 1024)) МБ"
-		fi
-		log "загрузка $url${GZ_KB:+ ($((GZ_KB / 1024)) МБ)}"
+		log "загрузка $url"
 		rm -f "$2"
 		# a failed or cut download leaves gunzip with a truncated stream, so its status is enough
 		if $CURL "$url" | gunzip -c > "$2" && [ -s "$2" ]; then
@@ -101,57 +127,89 @@ latest_version() {
 
 # --- preparation -----------------------------------------------------------
 
-[ -x "$BIN" ] || die "не найден $BIN (mihomo из пакета Nikki)"
+MISSING=0
+if [ ! -x "$BIN" ] || ! "$BIN" -v >/dev/null 2>&1; then
+	[ -d "$(dirname "$BIN")" ] || die "нет каталога для $BIN"
+	MISSING=1; log "ядра mihomo нет или оно повреждено — ставлю заново"
+fi
 ARCH="$(arch_asset)" || die "неизвестная архитектура роутера"
 OLD_FULL="$("$BIN" -v 2>/dev/null | head -n1)"
 OLD="$(echo "$OLD_FULL" | grep -o 'v[0-9][0-9.]*[0-9]' | head -n1)"
 log "сейчас: ${OLD_FULL:-неизвестно}"
 [ -n "$VER" ] && [ "$VER" != latest ] || VER="$(latest_version)"
 case "$VER" in v[0-9]*) ;; *) die "не удалось узнать последнюю версию mihomo" ;; esac
-[ "$VER" = "$OLD" ] && { log "уже установлена $VER — обновлять нечего"; exit 0; }
+[ "$MISSING" = 0 ] && [ "$VER" = "$OLD" ] && { log "уже установлена $VER — обновлять нечего"; exit 0; }
 log "обновление: ${OLD:-?} → $VER ($ARCH)"
 
 rm -rf "$W"; mkdir -p "$W" || die "нет места в /tmp"
-OLD_KB="$(kb "$BIN")"
-fetch_core "$VER" "$W/mihomo" check || die "не удалось скачать mihomo $VER ни с GitHub, ни через панель"
-NEW_KB="$(kb "$W/mihomo")"
-NEW_FULL="$("$W/mihomo" -v 2>/dev/null | head -n1)"
-echo "$NEW_FULL" | grep -q "$VER" || die "скачанный файл не запускается на этом роутере (${NEW_FULL:-нет вывода}) — архитектура $ARCH не подходит?"
-log "новое ядро: $NEW_FULL"
-if [ -f "$RUN/config.yaml" ]; then
-	"$W/mihomo" -d "$RUN" -f "$RUN/config.yaml" -t >"$W/test.log" 2>&1 || {
-		tail -n 5 "$W/test.log"
-		die "новое ядро не принимает текущий конфиг — оставляю $OLD"
-	}
-	log "текущий конфиг проверен новым ядром"
-fi
-
-# rollback copy of the current core: gzip in RAM if it fits, otherwise re-download later
-MEM_KB="${NF_MEM_KB:-$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)}"
-BACKUP="${NF_BACKUP_TEST:-}"
-if [ -z "$BACKUP" ] && [ "$MEM_KB" -ge $((OLD_KB * 45 / 100 + 16384)) ]; then
-	gzip -1 -c "$BIN" > "$W/old.gz" && BACKUP=ram || rm -f "$W/old.gz"
-fi
-[ -n "$BACKUP" ] || { [ -n "$OLD" ] && BACKUP=net; }
-[ -n "$BACKUP" ] || die "нет способа откатиться (мало памяти и версия текущего ядра неизвестна) — обновление отменено"
-log "резервная копия: $([ "$BACKUP" = ram ] && echo "в памяти" || echo "повторная загрузка $OLD при необходимости")"
-
+OLD_KB="$(kb "$BIN")"; OLD_KB="${OLD_KB:-0}"
+ENABLED=0; nikki_enabled && ENABLED=1
+probe_core "$VER" || die "mihomo $VER недоступен ни на GitHub, ни через панель"
+RAW_KB=$((GZ_KB * 29 / 10))
 FS="${NF_OVERLAY_FS:-$(awk '$2 == "/overlay" {print $3; exit}' /proc/mounts 2>/dev/null)}"
 FREE_KB="${NF_FREE_KB:-$(df -k "$(dirname "$BIN")" | awk 'NR==2 {print $4}')}"
 # compressed filesystems keep a Go binary at roughly 45-50% of its size; keep a margin
-case "$FS" in ubifs|jffs2) NEW_FL=$((NEW_KB * 52 / 100)); OLD_FL=$((OLD_KB * 42 / 100)) ;; *) NEW_FL=$NEW_KB; OLD_FL=$OLD_KB ;; esac
-if [ "$FREE_KB" -ge $((NEW_FL + 2048)) ]; then
-	MODE=rename
-elif [ $((FREE_KB + OLD_FL)) -ge $((NEW_FL + 1024)) ]; then
-	MODE=inplace
+flash_need() { case "$FS" in ubifs|jffs2) echo $(($1 * 52 / 100)) ;; *) echo "$1" ;; esac; }
+OLD_FL="$(case "$FS" in ubifs|jffs2) echo $((OLD_KB * 42 / 100)) ;; *) echo "$OLD_KB" ;; esac)"
+NEW_FL="$(flash_need "$RAW_KB")"
+[ $((FREE_KB + OLD_FL)) -ge $((NEW_FL + 1024)) ] || die "мало места во флеш-памяти: свободно $((FREE_KB / 1024)) МБ, новое ядро займёт около $((NEW_FL / 1024)) МБ (старое освободит около $((OLD_FL / 1024)) МБ)"
+
+# RAM plan: the unpacked core is ~2.9x the .gz; while the old core runs, the config
+# check (mihomo -t) also needs room, so keep a bigger margin then
+MEM="$(mem_kb)"; RSS="$(core_rss_kb)"
+log "релиз $((GZ_KB / 1024)) МБ (распакованный ~$((RAW_KB / 1024)) МБ), свободно RAM $((MEM / 1024)) МБ, ядро сейчас занимает $((RSS / 1024)) МБ"
+if [ "$MEM" -ge $((RAW_KB + 40960)) ]; then
+	PLAN=tmp
+elif [ "$ENABLED" = 1 ] && [ $((MEM + RSS * 85 / 100)) -ge $((RAW_KB + 24576)) ]; then
+	PLAN=tmp; stop_nikki
+	log "память освобождена: $(( $(mem_kb) / 1024 )) МБ"
 else
-	die "мало места во флеш-памяти: свободно $((FREE_KB / 1024)) МБ, для замены нужно около $(((NEW_FL - OLD_FL + 1024) / 1024)) МБ"
+	PLAN=stream
 fi
-log "флеш: свободно $((FREE_KB / 1024)) МБ ($FS), способ замены: $([ $MODE = rename ] && echo "рядом + переименование" || echo "поверх старого, с короткой остановкой Nikki")"
+
+if [ "$PLAN" = tmp ]; then
+	fetch_core "$VER" "$W/mihomo" || die "не удалось скачать mihomo $VER ни с GitHub, ни через панель"
+	NEW_KB="$(kb "$W/mihomo")"
+	NEW_FULL="$("$W/mihomo" -v 2>/dev/null | head -n1)"
+	echo "$NEW_FULL" | grep -q "$VER" || die "скачанный файл не запускается на этом роутере (${NEW_FULL:-нет вывода}) — архитектура $ARCH не подходит?"
+	log "новое ядро: $NEW_FULL"
+	if [ -f "$RUN/config.yaml" ]; then
+		"$W/mihomo" -d "$RUN" -f "$RUN/config.yaml" -t >"$W/test.log" 2>&1 || {
+			tail -n 5 "$W/test.log"
+			die "новое ядро не принимает текущий конфиг — оставляю $OLD"
+		}
+		log "текущий конфиг проверен новым ядром"
+	fi
+	NEW_FL="$(flash_need "$NEW_KB")"
+else
+	# Too little RAM even with the core stopped: the new core is written straight to
+	# flash and checked there; rollback is a re-download of the current version.
+	[ -n "$OLD" ] || [ "$MISSING" = 1 ] || die "мало оперативной памяти ($((MEM / 1024)) МБ), а версия текущего ядра неизвестна — откатиться было бы нечем, обновление отменено"
+	log "мало оперативной памяти даже без ядра — пишу новое ядро сразу во флеш${OLD:+, откат — повторной загрузкой $OLD}"
+fi
+
+# rollback copy of the current core: gzip in RAM if it fits, otherwise re-download later
+BACKUP="${NF_BACKUP_TEST:-}"
+if [ "$PLAN" = tmp ] && [ -z "$BACKUP" ] && [ "$(mem_kb)" -ge $((OLD_KB * 45 / 100 + 16384)) ]; then
+	gzip -1 -c "$BIN" > "$W/old.gz" && BACKUP=ram || rm -f "$W/old.gz"
+fi
+[ -n "$BACKUP" ] || { [ -n "$OLD" ] && BACKUP=net; }
+[ -n "$BACKUP" ] || { [ "$MISSING" = 1 ] && BACKUP=none; }
+[ -n "$BACKUP" ] || die "нет способа откатиться (мало памяти и версия текущего ядра неизвестна) — обновление отменено"
+case "$BACKUP" in ram) b="в памяти" ;; net) b="повторная загрузка $OLD при необходимости" ;; *) b="не нужна — прежнего ядра нет" ;; esac
+log "резервная копия: $b"
+
+if [ "$PLAN" = stream ]; then MODE=stream
+elif [ "$FREE_KB" -ge $((NEW_FL + 2048)) ]; then MODE=rename
+elif [ $((FREE_KB + OLD_FL)) -ge $((NEW_FL + 1024)) ]; then MODE=inplace
+else die "мало места во флеш-памяти: свободно $((FREE_KB / 1024)) МБ, для замены нужно около $(((NEW_FL - OLD_FL + 1024) / 1024)) МБ"
+fi
+case "$MODE" in
+	rename) m="рядом + переименование" ;; inplace) m="поверх старого, с короткой остановкой Nikki" ;; *) m="загрузка прямо на место старого" ;;
+esac
+log "флеш: свободно $((FREE_KB / 1024)) МБ (${FS:-?}), способ замены: $m"
 
 # --- replacement -----------------------------------------------------------
-
-ENABLED=0; nikki_enabled && ENABLED=1
 
 restore() {
 	log "восстанавливаю $OLD"
@@ -159,24 +217,41 @@ restore() {
 	rm -f "$BIN" "$BIN.new"
 	if [ "$BACKUP" = ram ] && [ -f "$W/old.gz" ]; then
 		gunzip -c "$W/old.gz" > "$BIN"
-	else
+	elif [ "$BACKUP" = net ]; then
 		fetch_core "$OLD" "$BIN"
 	fi
 	chmod 755 "$BIN" 2>/dev/null
+	if ! "$BIN" -v >/dev/null 2>&1; then
+		# never start Nikki without a working core: its firewall rules would cut the internet
+		rm -f "$BIN"; "$INIT" stop >/dev/null 2>&1
+		log "ВНИМАНИЕ: прежнее ядро восстановить не удалось. Nikki оставлен выключенным, интернет идёт напрямую."
+		log "Повторите, когда будет связь: nikki-fleet mihomo-update — без ядра скрипт просто поставит его заново"
+		return
+	fi
 	[ "$ENABLED" = 1 ] && "$INIT" start >/dev/null 2>&1
-	if "$BIN" -v >/dev/null 2>&1 && { [ "$ENABLED" = 0 ] || wait_api "" 40; }; then
+	if [ "$ENABLED" = 0 ] || wait_api "" 40; then
 		log "прежнее ядро восстановлено"
 	else
-		log "ВНИМАНИЕ: прежнее ядро восстановить не удалось — переустановите Nikki: wget -qO- ${PANEL:-<панель>}/install.sh | sh"
+		log "ВНИМАНИЕ: прежнее ядро восстановлено, но mihomo не ответил — проверьте Nikki"
 	fi
 }
 
-if [ "$MODE" = rename ]; then
+if [ "$MODE" = stream ]; then
+	stop_nikki
+	if ! fetch_core "$VER" "$BIN"; then log "загрузка прервалась"; restore; cleanup; exit 1; fi
+	NEW_FULL="$("$BIN" -v 2>/dev/null | head -n1)"
+	if ! echo "$NEW_FULL" | grep -q "$VER"; then log "новое ядро не запускается (${NEW_FULL:-нет вывода})"; restore; cleanup; exit 1; fi
+	log "новое ядро: $NEW_FULL"
+	if [ -f "$RUN/config.yaml" ] && ! "$BIN" -d "$RUN" -f "$RUN/config.yaml" -t >"$W/test.log" 2>&1; then
+		tail -n 5 "$W/test.log"; log "новое ядро не принимает текущий конфиг"; restore; cleanup; exit 1
+	fi
+	[ -f "$RUN/config.yaml" ] && log "текущий конфиг проверен новым ядром"
+elif [ "$MODE" = rename ]; then
 	cp "$W/mihomo" "$BIN.new" && chmod 755 "$BIN.new" && mv -f "$BIN.new" "$BIN" || {
 		rm -f "$BIN.new"; die "не удалось записать новое ядро (место?) — старое не тронуто"
 	}
 else
-	[ "$ENABLED" = 1 ] && { log "останавливаю Nikki"; "$INIT" stop >/dev/null 2>&1; sleep 1; }
+	stop_nikki
 	if ! cp "$W/mihomo" "$BIN"; then
 		log "запись не удалась"
 		restore; cleanup; exit 1
@@ -188,7 +263,8 @@ log "ядро записано"
 
 if [ "$ENABLED" = 1 ]; then
 	log "запускаю Nikki"
-	if [ "$MODE" = rename ]; then "$INIT" restart >/dev/null 2>&1; else "$INIT" start >/dev/null 2>&1; fi
+	if [ "$STOPPED" = 1 ]; then "$INIT" start >/dev/null 2>&1; else "$INIT" restart >/dev/null 2>&1; fi
+	STOPPED=0
 	if ! wait_api "$VER" 60; then
 		log "mihomo $VER не ответил за 60 секунд"
 		restore; cleanup; exit 1

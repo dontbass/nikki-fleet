@@ -410,7 +410,7 @@ function drawOverview(){
   $("#aUpdate")?.addEventListener("click", () => updateDialog(S.router));
   $("#cFleet")?.addEventListener("click", () => updateDialog(S.router));
   $("#cMihomo")?.addEventListener("click", () => jobDialog(S.router, {title:"Обновление ядра mihomo", type:"mihomo.update", args:{version: S.latestAll.mihomo || "latest"}, which:"mihomo",
-    note:`Официальная сборка MetaCubeX ${esc(S.latestAll.mihomo || "")}. Роутер скачает её (с GitHub или через панель) в оперативную память, проверит текущим конфигом и заменит ядро. При малом месте во флеше Nikki остановится на несколько секунд — интернет в это время идёт напрямую. Если новое ядро не запустится, вернётся прежнее.`}));
+    note:`Официальная сборка MetaCubeX ${esc(S.latestAll.mihomo || "")}. Роутер скачает её (с GitHub или через панель) в оперативную память, проверит текущим конфигом и заменит ядро. Если памяти или места во флеше мало, Nikki на время остановится — интернет в это время идёт напрямую; при совсем малой памяти ядро пишется сразу на место старого. Если новое ядро не запустится, вернётся прежнее.`}));
   $("#cUi")?.addEventListener("click", () => jobDialog(S.router, {title:"zashboard", type:"ui.update", which:"ui",
     note:`Веб-панель mihomo <a href="https://github.com/Zephyruso/zashboard" target="_blank" rel="noopener">zashboard</a> ${esc(S.latestAll.zashboard || "")} (сборка без шрифтов, ~5 МБ). Ставится в каталог external-ui Nikki; если места мало, старая версия заменяется, её копия на время держится в памяти.`}));
   $("#aStarter")?.addEventListener("click", () => starterDialog(S.router, {hasProfile:false}));
