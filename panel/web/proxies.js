@@ -129,7 +129,7 @@ function tabProxies(body, r){
             <span class="pill">${esc(p.vehicle === "HTTP" ? "подписка" : p.vehicle === "File" ? "файл" : p.vehicle || "")}</span><span class="small muted">${alive}/${p.proxies.length}</span></button>
           <span class="small muted">обновлена ${ago(p.updated)}${p.sub ? " · " + esc(subLine(p.sub)) : ""}</span>
           <span class="grow"></span>
-          ${edit && p.vehicle === "HTTP" ? `<button class="small" data-pxpupd="${esc(p.name)}">↻ обновить</button>` : ""}
+          ${edit && p.vehicle === "HTTP" ? `<button class="small" data-pxpupd="${esc(p.name)}">↻ обновить</button><button class="small" data-pxcopy="${esc(p.name)}" title="Скопировать подписку со всеми параметрами на другие роутеры">⧉ на роутер…</button>` : ""}
           <button class="small" data-pxphc="${esc(p.name)}" ${P.testing.has("p:" + p.name) ? "disabled" : ""}>${P.testing.has("p:" + p.name) ? "проверяю…" : "⚡ проверить"}</button>
         </div>
         ${p.sub?.Total ? `<div class="bar"><i class="${pct>85?"hi":""}" style="width:${pct.toFixed(1)}%"></i></div>` : ""}
@@ -194,6 +194,8 @@ function tabProxies(body, r){
       }catch(err){ g.now = prev; draw(); flash(err.message, true); }
       return;
     }
+    const pc = t.closest("[data-pxcopy]");
+    if(pc){ subCopyDialog(r, pc.dataset.pxcopy).catch(err => flash(err.message, true)); return; }
     const pu = t.closest("[data-pxpupd]");
     if(pu){ pu.disabled = true; pu.textContent = "обновляю…";
       try{ const x = await api("PUT", `/providers/proxies/${enc(pu.dataset.pxpupd)}`); flash(x.ok ? "Подписка обновлена" : (x.data?.message || x.error || "Не удалось обновить"), !x.ok); }catch(err){ flash(err.message, true); }

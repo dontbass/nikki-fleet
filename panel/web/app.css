@@ -304,3 +304,11 @@ button.small{font-size:12px;min-height:26px;padding:3px 8px}
   .trhost{max-width:none;overflow-wrap:anywhere}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* subscription copy */
+.sclist{display:flex;flex-direction:column;gap:6px;margin:12px 0;max-height:46vh;overflow:auto}
+.scitem{display:grid;grid-template-columns:auto auto 1fr;gap:4px 10px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:10px;cursor:pointer}
+.scitem input{width:auto;margin:0}
+.scitem.off{opacity:.55;cursor:default}
+.scitem .scres{grid-column:2 / -1}
+.scitem .scres:empty{display:none}
