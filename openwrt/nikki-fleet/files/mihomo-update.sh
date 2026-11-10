@@ -23,6 +23,8 @@ PANEL="${2:-}"
 INSECURE="${3:-0}"
 R="${NF_ROOT:-}"
 BIN="${NF_MIHOMO_BIN:-$R/usr/bin/mihomo}"
+# /usr/bin/mihomo may be a symlink: replace the file it points to
+[ -L "$BIN" ] && BIN="$(readlink -f "$BIN" 2>/dev/null || echo "$BIN")"
 INIT="$R/etc/init.d/nikki"
 RUN="$R/etc/nikki/run"
 CLI="${NF_CLI:-nikki-fleet}"
@@ -53,7 +55,8 @@ core_rss_kb() {
 	done
 	echo "$t"
 }
-kb() { du -k "$1" 2>/dev/null | awk '{print $1}'; }
+# file size in KB from the byte count: du reports 0 for a symlink and is not reliable on ubifs
+kb() { b="$(wc -c < "$1" 2>/dev/null)"; echo $(( ${b:-0} / 1024 )); }
 CURL="curl -fsSL --connect-timeout 15 --retry 2"
 [ "$INSECURE" = 1 ] && CURL="$CURL -k"
 
@@ -135,7 +138,7 @@ fi
 ARCH="$(arch_asset)" || die "неизвестная архитектура роутера"
 OLD_FULL="$("$BIN" -v 2>/dev/null | head -n1)"
 OLD="$(echo "$OLD_FULL" | grep -o 'v[0-9][0-9.]*[0-9]' | head -n1)"
-log "сейчас: ${OLD_FULL:-неизвестно}"
+log "сейчас: ${OLD_FULL:-неизвестно} ($BIN, $(( $(kb "$BIN") / 1024 )) МБ)"
 [ -n "$VER" ] && [ "$VER" != latest ] || VER="$(latest_version)"
 case "$VER" in v[0-9]*) ;; *) die "не удалось узнать последнюю версию mihomo" ;; esac
 [ "$MISSING" = 0 ] && [ "$VER" = "$OLD" ] && { log "уже установлена $VER — обновлять нечего"; exit 0; }
@@ -151,6 +154,10 @@ FREE_KB="${NF_FREE_KB:-$(df -k "$(dirname "$BIN")" | awk 'NR==2 {print $4}')}"
 # compressed filesystems keep a Go binary at roughly 45-50% of its size; keep a margin
 flash_need() { case "$FS" in ubifs|jffs2) echo $(($1 * 52 / 100)) ;; *) echo "$1" ;; esac; }
 OLD_FL="$(case "$FS" in ubifs|jffs2) echo $((OLD_KB * 42 / 100)) ;; *) echo "$OLD_KB" ;; esac)"
+# a core that sits in the read-only firmware (/rom) frees nothing on the overlay when replaced
+if [ -d "$R/overlay/upper" ] && [ "$MISSING" = 0 ] && [ ! -e "$R/overlay/upper${BIN#$R}" ]; then
+	OLD_FL=0; log "текущее ядро встроено в прошивку — его замена место во флеше не освободит"
+fi
 NEW_FL="$(flash_need "$RAW_KB")"
 [ $((FREE_KB + OLD_FL)) -ge $((NEW_FL + 1024)) ] || die "мало места во флеш-памяти: свободно $((FREE_KB / 1024)) МБ, новое ядро займёт около $((NEW_FL / 1024)) МБ (старое освободит около $((OLD_FL / 1024)) МБ)"
 

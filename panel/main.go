@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-var version = "0.1.17"
+var version = "0.1.18"
 
 //go:embed web
 var webFS embed.FS
