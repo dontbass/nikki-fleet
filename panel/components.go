@@ -261,5 +261,8 @@ func (a *App) latestVersions(w http.ResponseWriter, r *http.Request, u *User) {
 	if tag, err := a.mirror.latestTag(ctx, zashboardRepo); err == nil {
 		out["zashboard"] = tag
 	}
+	if tag, err := a.mirror.latestTag(ctx, nikkiRepo); err == nil {
+		out["nikki"] = tag // release tag = luci-app-nikki version
+	}
 	writeJSON(w, http.StatusOK, out)
 }

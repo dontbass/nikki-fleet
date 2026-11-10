@@ -167,6 +167,7 @@ const COMMANDS = {
 		return ops.run_job('mihomo', [ v, c.server, c.insecure ? '1' : '0' ]);
 	},
 	'ui.update': a => { const c = agent_cfg(); return ops.run_job('ui', [ c.server, c.insecure ? '1' : '0' ]); },
+	'nikki.update': a => { const c = agent_cfg(); return ops.run_job('nikki', [ c.server, c.insecure ? '1' : '0' ]); },
 	'mihomo.api': a => {
 		if (!api_allowed(a?.method ?? 'GET', `${a?.path}`))
 			return { ok: false, error: 'this API call is not allowed remotely' };
@@ -301,6 +302,7 @@ usage:
   nikki-fleet update [panel-url]         upgrade nikki-fleet packages in the background
   nikki-fleet mihomo-update [vX.Y.Z]     replace the mihomo core with an official release (default: latest)
   nikki-fleet ui-update                  install/update the zashboard web UI
+  nikki-fleet nikki-update               update Nikki itself (packages via the panel, with rollback)
   nikki-fleet starter <name> <url> [--profile=file.yaml]
                                          create a working profile from the starter template
 `;
@@ -413,6 +415,10 @@ case 'starter': {
 		activate: true, reload: true });
 	out(r);
 	exit(r.ok ? 0 : 2);
+}
+case 'nikki-update': {
+	const c = agent_cfg();
+	exit(system('sh ' + q(P.libexec + '/nikki-update.sh') + ' ' + q(c.server ?? args[1] ?? '') + ' ' + (c.insecure ? '1' : '0')));
 }
 case 'mihomo-update':
 case 'ui-update': {

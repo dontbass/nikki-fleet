@@ -2,7 +2,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=nikki-fleet
-PKG_VERSION:=0.1.20
+PKG_VERSION:=0.1.21
 PKG_RELEASE:=1
 
 PKG_LICENSE:=GPL-3.0-or-later
@@ -42,6 +42,7 @@ define Package/nikki-fleet/install
 	$(INSTALL_DATA) ./files/starter.yaml $(1)/usr/share/nikki-fleet/starter.yaml
 	$(INSTALL_BIN) ./files/mihomo-update.sh $(1)/usr/libexec/nikki-fleet/mihomo-update.sh
 	$(INSTALL_BIN) ./files/ui-update.sh $(1)/usr/libexec/nikki-fleet/ui-update.sh
+	$(INSTALL_BIN) ./files/nikki-update.sh $(1)/usr/libexec/nikki-fleet/nikki-update.sh
 	$(INSTALL_BIN) ./files/nikki-fleet.init $(1)/etc/init.d/nikki-fleet
 	$(INSTALL_CONF) ./files/nikki-fleet.conf $(1)/etc/config/nikki-fleet
 endef

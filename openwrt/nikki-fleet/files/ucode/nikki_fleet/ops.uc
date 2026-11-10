@@ -5,7 +5,7 @@
 
 import { readfile, writefile, popen, stat, lsdir, mkdir, unlink, rename, chmod } from 'fs';
 
-export const VERSION = '0.1.20';
+export const VERSION = '0.1.21';
 
 // NF_ROOT lets tests run against a fake filesystem root.
 const ROOT = getenv('NF_ROOT') ?? '';
@@ -306,7 +306,7 @@ function update_running() {
 }
 
 /* background jobs (mihomo / UI updates): detached, one log and pid file each */
-const JOBS = { mihomo: 'mihomo-update.sh', ui: 'ui-update.sh' };
+const JOBS = { mihomo: 'mihomo-update.sh', ui: 'ui-update.sh', nikki: 'nikki-update.sh' };
 const job_log = n => ROOT + '/tmp/nikki-fleet-' + n + '.log';
 const job_pid = n => ROOT + '/tmp/nikki-fleet-' + n + '.pid';
 

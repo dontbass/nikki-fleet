@@ -334,6 +334,7 @@ var cmdNeed = map[string]string{
 	"fleet.update":        "owner",
 	"mihomo.update":       "owner",
 	"ui.update":           "owner",
+	"nikki.update":        "owner",
 	"mihomo.api":          "viewer", // non-GET requires editor, checked below
 	"profile.write":       "editor",
 	"backup.restore":      "editor",

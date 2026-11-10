@@ -341,6 +341,7 @@ function componentsPanel(r, st){
   return `<div class="panel"><div class="spread"><h3>Компоненты</h3>${fl ? `<span class="small muted">флеш: свободно ${bytes(fl.free_kb*1024)} из ${bytes(fl.total_kb*1024)} · ${esc(fl.fs)}</span>` : ""}</div>
     <div class="comps">
       ${row("nikki-fleet", "агент и конфигуратор", r.agent_version, L.fleet, vnew(r.agent_version, L.fleet), "cFleet", "Обновить")}
+      ${row("Nikki", "служба и страница в LuCI", st.nikki?.version, L.nikki ? "релиз " + L.nikki : "", vnew(st.nikki?.luci_version, L.nikki), st.nikki?.version ? "cNikki" : "", "Обновить")}
       ${row("mihomo", "ядро прокси", mv, L.mihomo, vnew(mv, L.mihomo), mv ? "cMihomo" : "", "Обновить ядро")}
       ${row("zashboard", "веб-панель mihomo", st.ui ? (uv || (st.ui.present ? "установлена" : "")) : "", L.zashboard, uv ? vnew(uv, L.zashboard) : !!(st.ui && L.zashboard), st.ui ? "cUi" : "", uv || st.ui?.present ? "Обновить" : "Установить")}
     </div>
@@ -411,6 +412,8 @@ function drawOverview(){
   $("#cFleet")?.addEventListener("click", () => updateDialog(S.router));
   $("#cMihomo")?.addEventListener("click", () => jobDialog(S.router, {title:"Обновление ядра mihomo", type:"mihomo.update", args:{version: S.latestAll.mihomo || "latest"}, which:"mihomo",
     note:`Официальная сборка MetaCubeX ${esc(S.latestAll.mihomo || "")}. Роутер скачает её (с GitHub или через панель) в оперативную память, проверит текущим конфигом и заменит ядро. Если памяти или места во флеше мало, Nikki на время остановится — интернет в это время идёт напрямую; при совсем малой памяти ядро пишется сразу на место старого. Если новое ядро не запустится, вернётся прежнее.`}));
+  $("#cNikki")?.addEventListener("click", () => jobDialog(S.router, {title:"Обновление Nikki", type:"nikki.update", which:"nikki",
+    note:`Пакеты nikki, luci-app-nikki и перевод из релиза <a href="https://github.com/nikkinikki-org/OpenWrt-nikki" target="_blank" rel="noopener">OpenWrt-nikki</a> ${esc(S.latestAll.nikki || "")} — через эту панель, с проверкой SHA-256. Ядро mihomo не меняется. Перед установкой — проверочная установка (зависимости) и копия текущего Nikki в памяти; настройки и профили сохраняются. Nikki перезапустится (несколько секунд интернет идёт напрямую); если mihomo не ответит за минуту, вернётся прежний Nikki.`}));
   $("#cUi")?.addEventListener("click", () => jobDialog(S.router, {title:"zashboard", type:"ui.update", which:"ui",
     note:`Веб-панель mihomo <a href="https://github.com/Zephyruso/zashboard" target="_blank" rel="noopener">zashboard</a> ${esc(S.latestAll.zashboard || "")} (сборка без шрифтов, ~5 МБ). Ставится в каталог external-ui Nikki; если места мало, старая версия заменяется, её копия на время держится в памяти.`}));
   $("#aStarter")?.addEventListener("click", () => starterDialog(S.router, {hasProfile:false}));

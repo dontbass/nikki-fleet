@@ -6,12 +6,15 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -350,5 +353,56 @@ func TestComponentMirror(t *testing.T) {
 	resp.Body.Close()
 	if !seen["index.html"] || len(seen) < 10 {
 		t.Fatalf("repacked archive: %v", seen)
+	}
+}
+
+func TestNikkiPkgMirror(t *testing.T) {
+	tgz, err := os.ReadFile("/tmp/nikki-test-24.tgz")
+	if err != nil {
+		t.Skip("no Nikki release tarball for the test")
+	}
+	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/nikkinikki-org/OpenWrt-nikki/releases/latest":
+			http.Redirect(w, r, "/nikkinikki-org/OpenWrt-nikki/releases/tag/v1.26.2", http.StatusFound)
+		case "/nikkinikki-org/OpenWrt-nikki/releases/download/v1.26.2/nikki_aarch64_cortex-a53-openwrt-24.10.tar.gz":
+			w.Write(tgz)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer gh.Close()
+	old := ghBase
+	ghBase = gh.URL
+	defer func() { ghBase = old }()
+	_, srv := testApp(t)
+	c := newClient(t, srv)
+	var idx nikkiIndex
+	if code := c.do("GET", "/dl/nikki-pkg/openwrt-24.10/aarch64_cortex-a53/index.json", nil, &idx); code != 200 {
+		t.Fatalf("index: %d", code)
+	}
+	p, ok := idx.Packages["nikki"]
+	if !ok || p.Version != "2026.10.10-r1" || len(p.SHA256) != 64 || idx.Tag != "v1.26.2" {
+		t.Fatalf("index: %+v", idx)
+	}
+	for name := range idx.Packages {
+		if strings.HasPrefix(name, "mihomo") {
+			t.Fatalf("mihomo must not be offered: %s", name)
+		}
+	}
+	if _, ok := idx.Packages["luci-i18n-nikki-ru"]; !ok {
+		t.Fatalf("translation missing: %+v", idx.Packages)
+	}
+	resp, _ := http.Get(srv.URL + "/dl/nikki-pkg/openwrt-24.10/aarch64_cortex-a53/" + p.File)
+	b, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	sum := sha256.Sum256(b)
+	if resp.StatusCode != 200 || hex.EncodeToString(sum[:]) != p.SHA256 {
+		t.Fatalf("package download: %d", resp.StatusCode)
+	}
+	for _, bad := range []string{"/dl/nikki-pkg/openwrt-23.05/aarch64_cortex-a53/index.json", "/dl/nikki-pkg/openwrt-24.10/aarch64_cortex-a53/mihomo-meta_1.19.32_aarch64_cortex-a53.ipk", "/dl/nikki-pkg/openwrt-24.10/x/..%2Fstate.json"} {
+		if r, _ := http.Get(srv.URL + bad); r.StatusCode == 200 {
+			t.Fatalf("%s must be rejected", bad)
+		}
 	}
 }

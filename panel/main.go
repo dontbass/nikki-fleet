@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-var version = "0.1.20"
+var version = "0.1.21"
 
 //go:embed web
 var webFS embed.FS
@@ -109,6 +109,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /install.sh", a.installScript)
 	mux.HandleFunc("GET /dl/{src}/{file}", a.mirrorHandler)
 	mux.HandleFunc("GET /dl/mihomo/{tag}/{file}", a.mihomoMirror)
+	mux.HandleFunc("GET /dl/nikki-pkg/{branch}/{arch}/{file}", a.nikkiPkgMirror)
 	mux.HandleFunc("GET /api/wallpaper", a.wallpaperInfo)
 	mux.HandleFunc("GET /wallpaper.jpg", a.wallpaperImage)
 
