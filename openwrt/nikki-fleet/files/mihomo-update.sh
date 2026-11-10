@@ -93,10 +93,17 @@ arch_asset() {
 	esac
 }
 
+# download sources: while Nikki is stopped the router has no proxy, so the panel
+# (your own server) goes first; otherwise GitHub first to spare the panel's traffic
+sources() {
+	gh="$GH/releases/download/$1/$2"; pn="${PANEL:+$PANEL/dl/mihomo/$1/$2}"
+	if [ "$STOPPED" = 1 ] && [ -n "$pn" ]; then echo "$pn $gh"; else echo "$gh $pn"; fi
+}
+
 # probe_core <version>: size of the release .gz (GZ_KB) from GitHub or the panel's mirror
 probe_core() {
 	name="mihomo-linux-$ARCH-$1.gz"
-	for url in "$GH/releases/download/$1/$name" ${PANEL:+"$PANEL/dl/mihomo/$1/$name"}; do
+	for url in $(sources "$1" "$name"); do
 		GZ_KB="$($CURL -I "$url" 2>/dev/null | tr -d '\r' | awk 'tolower($1)=="content-length:" {n=$2} END {print int(n/1024)}')"
 		[ "${GZ_KB:-0}" -gt 1024 ] && return 0
 		log "недоступно: $url"
@@ -107,11 +114,12 @@ probe_core() {
 # fetch_core <version> <out-file>: GitHub first, then the panel's mirror; gunzip on the fly
 fetch_core() {
 	name="mihomo-linux-$ARCH-$1.gz"
-	for url in "$GH/releases/download/$1/$name" ${PANEL:+"$PANEL/dl/mihomo/$1/$name"}; do
+	for url in $(sources "$1" "$name"); do
 		log "загрузка $url"
 		rm -f "$2"
-		# a failed or cut download leaves gunzip with a truncated stream, so its status is enough
-		if $CURL "$url" | gunzip -c > "$2" && [ -s "$2" ]; then
+		# a failed or cut download leaves gunzip with a truncated stream, so its status is enough;
+		# a throttled source (slower than 50 KB/s for 30 s) is dropped for the next one
+		if $CURL -y 30 -Y 51200 "$url" | gunzip -c > "$2" && [ -s "$2" ]; then
 			chmod 755 "$2"
 			return 0
 		fi
