@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 'use strict';
 
-import { readfile, writefile, popen, stat, lsdir, mkdir, unlink, rename } from 'fs';
+import { readfile, writefile, popen, stat, lsdir, mkdir, unlink, rename, chmod } from 'fs';
 
-export const VERSION = '0.1.18';
+export const VERSION = '0.1.19';
 
 // NF_ROOT lets tests run against a fake filesystem root.
 const ROOT = getenv('NF_ROOT') ?? '';
@@ -245,6 +245,21 @@ function controller() {
 	return value;
 }
 
+// Secrets (panel token, mihomo secret) go to curl through a private config
+// file (-K), never on the command line, which every process can read.
+export function curl_auth(name, value) {
+	const f = ROOT + '/tmp/nikki-fleet-' + name + '.curl';
+	const line = 'header = "Authorization: Bearer ' + replace(replace(`${value}`, '\\', '\\\\'), '"', '\\"') + '"\n';
+	if (readfile(f) != line) {
+		const tmp = f + '.' + uid();
+		writefile(tmp, '');
+		chmod(tmp, 0o600);
+		writefile(tmp, line);
+		rename(tmp, f);
+	}
+	return f;
+};
+
 const API_METHODS = { GET: true, PUT: true, PATCH: true, POST: true, DELETE: true };
 
 export function api(method, path, body, timeout) {
@@ -260,7 +275,7 @@ export function api(method, path, body, timeout) {
 
 	let cmd = 'curl -sS -k -X ' + method + ' --max-time ' + int(timeout ?? 15) + " -w '\\n%{http_code}'";
 	if (c.secret)
-		cmd += ' -H ' + q('Authorization: Bearer ' + c.secret);
+		cmd += ' -K ' + q(curl_auth('mihomo', c.secret));
 	let bodyfile = null;
 	if (body != null) {
 		bodyfile = tmpname('body');

@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-var version = "0.1.18"
+var version = "0.1.19"
 
 //go:embed web
 var webFS embed.FS
@@ -129,6 +129,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("PATCH /api/routers/{id}", a.requireUser(a.patchRouter))
 	mux.HandleFunc("DELETE /api/routers/{id}", a.requireUser(a.deleteRouter))
 	mux.HandleFunc("POST /api/routers/{id}/cmd", a.requireUser(a.routerCmd))
+	mux.HandleFunc("POST /api/routers/{id}/rotate-key", a.requireUser(a.rotateKey))
 	mux.HandleFunc("GET /api/routers/{id}/versions", a.requireUser(a.listVersions))
 	mux.HandleFunc("GET /api/routers/{id}/versions/{vid}", a.requireUser(a.getVersion))
 	mux.HandleFunc("GET /api/routers/{id}/shares", a.requireUser(a.listShares))

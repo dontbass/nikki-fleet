@@ -20,7 +20,7 @@ function http(method, url, body, timeout, token, insecure, resolve) {
 	if (insecure)
 		cmd += ' -k';
 	if (token)
-		cmd += ' -H ' + q('Authorization: Bearer ' + token);
+		cmd += ' -K ' + q(ops.curl_auth('panel', token));
 	if (resolve)
 		cmd += ' --resolve ' + q(resolve);
 	let f = null;
@@ -150,6 +150,14 @@ const COMMANDS = {
 	'logs.tail': a => ops.logs_tail(a?.which, a?.lines),
 	'traffic': a => ops.traffic(a?.limit),
 	'proxies': a => ops.proxies(),
+	'agent.rotate': a => {
+		// new key from the panel; the next poll already uses it
+		if (!match(`${a?.token ?? ''}`, /^[0-9a-f]{64}$/))
+			return { ok: false, error: 'invalid token' };
+		ops.uci_set('nikki-fleet.agent.token', a.token);
+		ops.uci_commit('nikki-fleet');
+		return { ok: true };
+	},
 	'fleet.update': a => { const c = agent_cfg(); return ops.self_update(c.server, c.insecure); },
 	'mihomo.update': a => {
 		const v = `${a?.version ?? 'latest'}`;
@@ -228,9 +236,12 @@ function agent_run() {
 					clear_pending();   // panel reachable with the new config — keep it
 				status_interval = r.data?.status_interval ?? status_interval;
 				for (let cmd in (r.data?.commands ?? [])) {
-					push(results, execute(cmd));
+					const res = execute(cmd);
+					push(results, res);
 					if (cmd.type == 'status')
 						last_status = time();
+					if (cmd.type == 'agent.rotate' && res.ok)
+						cfg = agent_cfg();
 				}
 			}
 		} catch (e) {

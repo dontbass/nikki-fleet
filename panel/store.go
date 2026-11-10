@@ -33,6 +33,7 @@ type Router struct {
 	Name         string          `json:"name"`
 	Notes        string          `json:"notes"`
 	TokenHash    string          `json:"token_hash"`
+	PendingHash  string          `json:"pending_token_hash,omitempty"` // new agent key until the agent first uses it
 	Created      time.Time       `json:"created"`
 	LastSeen     time.Time       `json:"last_seen"`
 	AgentVersion string          `json:"agent_version"`
@@ -200,6 +201,12 @@ func (s *state) router(id string) *Router {
 func (s *state) routerByToken(hash string) *Router {
 	for _, r := range s.Routers {
 		if r.TokenHash != "" && r.TokenHash == hash {
+			return r
+		}
+		if r.PendingHash != "" && r.PendingHash == hash {
+			// the agent switched to its new key: the old one stops working
+			r.TokenHash, r.PendingHash = r.PendingHash, ""
+			s.audit("", r.ID, "agent.key_rotated", "")
 			return r
 		}
 	}

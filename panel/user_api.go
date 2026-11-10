@@ -751,3 +751,49 @@ func (a *App) adminSettings(w http.ResponseWriter, r *http.Request, u *User) {
 	})
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
+
+// rotateKey gives the agent a new key over its current channel. The panel
+// accepts both keys until the agent polls with the new one; then the old key
+// stops working. Useful if the old key was exposed (logs, screenshots).
+func (a *App) rotateKey(w http.ResponseWriter, r *http.Request, u *User) {
+	rt, _, ok := a.access(w, r, u, "owner")
+	if !ok {
+		return
+	}
+	if !a.online(rt) {
+		writeErr(w, http.StatusServiceUnavailable, "роутер не на связи")
+		return
+	}
+	tok := randomHex(32)
+	a.store.UpdateNow(func(s *state) error {
+		if x := s.router(rt.ID); x != nil {
+			x.PendingHash = sha(tok)
+		}
+		return nil
+	})
+	res, err := a.hub.Call(r.Context(), rt.ID, "agent.rotate", map[string]string{"token": tok}, 45*time.Second)
+	if err != nil || !res.OK {
+		a.store.UpdateNow(func(s *state) error {
+			if x := s.router(rt.ID); x != nil {
+				x.PendingHash = ""
+			}
+			return nil
+		})
+		msg := "роутер не ответил вовремя"
+		if err == nil {
+			msg = res.Error
+			if msg == "" {
+				var d struct{ Error string }
+				json.Unmarshal(res.Data, &d)
+				msg = "агент не принял ключ: " + d.Error
+			}
+			if strings.Contains(msg, "unknown command") {
+				msg = "агент на роутере устарел — сначала обновите nikki-fleet"
+			}
+		}
+		writeErr(w, http.StatusBadGateway, msg)
+		return
+	}
+	a.store.Update(func(s *state) error { s.audit(u.ID, rt.ID, "agent.key_issued", ""); return nil })
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}

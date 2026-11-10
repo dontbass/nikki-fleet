@@ -554,6 +554,9 @@ async function tabSettings(body){
       <label class="f"><span>Заметки</span><textarea id="snotes" rows="3" style="font-family:var(--f-ui);font-size:14px">${esc(r.notes)}</textarea></label>
       <div class="row end"><button class="primary">Сохранить</button></div></form>` : ""}
     <div class="panel"><h3>Журнал</h3><div id="audit" class="muted small">Загрузка…</div></div>
+    ${r.role==="owner" ? `<div class="panel"><h3>Ключ агента</h3>
+      <div class="small">Роутер подключается к панели по секретному ключу. Если ключ мог попасть в чужие руки (скриншот, лог, чужой доступ к роутеру), выдайте новый: агент получит его по текущему соединению, старый перестанет работать. Роутер остаётся в панели со всей историей.</div>
+      <div><button id="rotKey"${r.online ? "" : " disabled title=\"Роутер не на связи\""}>Выдать новый ключ</button></div></div>` : ""}
     ${r.role==="owner" ? `<div class="panel"><h3>Удаление</h3>
       <div class="small">Роутер исчезнет из панели, его токен перестанет работать. На самом роутере агент можно отключить командой <code>nikki-fleet unenroll</code>.</div>
       <div><button class="danger" id="delRouter">Удалить роутер из панели</button></div></div>` : ""}`;
@@ -562,12 +565,17 @@ async function tabSettings(body){
     try{ await patch(`/api/routers/${r.id}`, {name: $("#sn").value, notes: $("#snotes").value}); flash("Сохранено"); renderRouter(r.id, "settings"); }
     catch(err){ flash(err.message, true); }
   });
+  $("#rotKey")?.addEventListener("click", async e => {
+    const b = e.currentTarget; b.disabled = true; b.textContent = "Выдаю…";
+    try{ await post(`/api/routers/${r.id}/rotate-key`, {}); flash("Новый ключ выдан — старый перестанет работать при следующем подключении агента"); b.textContent = "Ключ обновлён"; }
+    catch(err){ flash(err.message, true); b.disabled = false; b.textContent = "Выдать новый ключ"; }
+  });
   $("#delRouter")?.addEventListener("click", async e => {
     const b = e.currentTarget;
     if(!b.dataset.armed){ b.dataset.armed = "1"; b.textContent = "Нажмите ещё раз для удаления"; setTimeout(()=>{ if(b.isConnected){ delete b.dataset.armed; b.textContent = "Удалить роутер из панели"; } }, 4000); return; }
     try{ await del(`/api/routers/${r.id}`); flash("Роутер удалён"); location.hash = "#/"; }catch(err){ flash(err.message, true); }
   });
-  const ACT = {"router.enrolled":"роутер подключён","cmd.ok":"изменение применено","cmd.error":"изменение отклонено","cmd.rolled_back":"откат после ошибки","share.added":"выдан доступ","share.removed":"доступ убран","agent.auto_rollback":"автооткат: панель была недоступна"};
+  const ACT = {"router.enrolled":"роутер подключён","cmd.ok":"изменение применено","cmd.error":"изменение отклонено","cmd.rolled_back":"откат после ошибки","share.added":"выдан доступ","share.removed":"доступ убран","agent.auto_rollback":"автооткат: панель была недоступна","agent.key_issued":"выдан новый ключ агента","agent.key_rotated":"агент перешёл на новый ключ"};
   try{
     const a = await get(`/api/routers/${r.id}/audit`);
     $("#audit").outerHTML = a.length ? `<div class="tbl" id="audit"><table><tbody>${a.map(x => `<tr><td class="muted" style="white-space:nowrap">${fmtDate(x.time)}</td><td>${esc(x.user || "роутер")}</td><td>${esc(ACT[x.action] || x.action)}</td><td class="mono small">${esc(x.detail)}</td></tr>`).join("")}</tbody></table></div>` : `<div class="muted small" id="audit">Записей нет</div>`;
