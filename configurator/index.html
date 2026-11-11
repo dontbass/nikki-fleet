@@ -997,7 +997,7 @@ function quickAddText(text){
   const sec = document.querySelector(`.prov[data-id="${last.p.id}"]`);
   if(sec){ sec.classList.add("fresh"); sec.scrollIntoView({block:"center", behavior:"smooth"}); const ni = document.getElementById("n-"+last.p.id); if(ni){ ni.focus(); ni.select(); } }
   flash(done.length > 1 ? `Добавлено подписок: ${done.length}` :
-    `«${last.p.name}»: ${last.groups.length ? "группы " + last.groups.join(", ") + (last.parents.length ? " → в " + last.parents.join(", ") : "") : last.parents.length ? "добавлена в группы " + last.parents.join(", ") : "без групп"}${last.rules ? `, правил: ${last.rules}` : ""}. Имя можно поменять — группы переименуются следом.`);
+    `«${last.p.name}»: ${last.groups.length ? "группы " + last.groups.join(", ") + (last.parents.filter(x => !last.pools.includes(x)).length ? " → в " + last.parents.filter(x => !last.pools.includes(x)).join(", ") : "") + (last.pools.length ? "; в общих: " + last.pools.join(", ") : "") : last.parents.length ? "добавлена в группы " + last.parents.join(", ") : "без групп"}${last.rules ? `, правил: ${last.rules}` : ""}. Имя можно поменять — группы переименуются следом.`);
 }
 
 function quickAddOne(url){
@@ -1006,12 +1006,17 @@ function quickAddOne(url){
   // template provider: the most recent one that has its own groups, else the last one
   const owners = [...pats.values()].flat().map(x => x.prov);
   const tpl = owners.length ? owners[owners.length - 1] : provs[provs.length - 1];
+  // device headers: the set most subscriptions send (a router profile), so one
+  // service's phone x-hwid is not copied to another; a tie goes to the neighbour
+  const hk = x => JSON.stringify([x.hdr, x.extraHdr]), cnt = {};
+  provs.forEach(x => cnt[hk(x)] = (cnt[hk(x)] || 0) + 1);
+  const hdrSrc = provs.reduce((a, b) => !a || cnt[hk(b)] > cnt[hk(a)] ? b : a, tpl && provs.includes(tpl) ? tpl : null);
   let path = `./providers/${name.toLowerCase()}.yaml`;
   if(tpl){ const tp = tpl.path || "", tn = tpl.name.toLowerCase(), i = tp.toLowerCase().lastIndexOf(tn);
     if(i >= 0) path = tp.slice(0, i) + name.toLowerCase() + tp.slice(i + tn.length); }
   const p = {
     id:uid(), name, savedName:name, enabled:true, url, path, interval:tpl ? tpl.interval : 86400, exclude:"",
-    hdr: tpl ? clone(tpl.hdr) : {ua:"",hwid:"",os:"",ver:"",model:""}, extraHdr: tpl ? clone(tpl.extraHdr) : {},
+    hdr: hdrSrc ? clone(hdrSrc.hdr) : {ua:"",hwid:"",os:"",ver:"",model:""}, extraHdr: hdrSrc ? clone(hdrSrc.extraHdr) : {},
     extra: tpl ? clone(tpl.extra) : {type:"http",
       "health-check":{enable:true,url:"http://www.msftconnecttest.com/connecttest.txt",interval:600,timeout:5000,"expected-status":200},
       override:{"skip-cert-verify":true}},
@@ -1023,6 +1028,9 @@ function quickAddOne(url){
   if(lastOwner) provs.splice(provs.indexOf(lastOwner) + 1, 0, p); else provs.push(p);
 
   const created = [], parents = new Set(); let ruleCount = 0;
+  const others = provs.filter(x => x !== p && x.enabled !== false);
+  const pools = others.length > 1 ? groupNames().filter(gn => others.every(x => x.groups.has(gn))) : [];
+  for(const gn of pools){ p.groups.add(gn); parents.add(gn); }
   const addAfter = (arr, afterIdx, val) => arr.splice(afterIdx + 1, 0, val);
   if(pats.size){
     for(const [key, inst] of pats){
@@ -1053,6 +1061,8 @@ function quickAddOne(url){
         ruleCount++;
       }
     }
+  } else if(pools.length){
+    // shared pools only: joined above
   } else if(tpl && tpl.groups.size){
     // no per-subscription groups: subscriptions share pool groups (Auto, RU-Force…
     // all "use" them) — the new one joins the same groups as its neighbour
@@ -1076,7 +1086,7 @@ function quickAddOne(url){
       parents.add("Proxy");
     }
   }
-  return {p, groups:created, parents:[...parents], rules:ruleCount};
+  return {p, groups:created, parents:[...parents], pools, rules:ruleCount};
 }
 
 // renaming a subscription renames the groups named after it (EOF-Best → New-Best)

@@ -74,6 +74,11 @@ function scMerge(doc, name, prov, opts){
   for(const [k, v] of pats) if(!v.length) pats.delete(k);
 
   const parents = new Set();
+  // pool groups that take every other subscription (Auto, RU-Force, Manual…) take the new one too
+  const others = Object.keys(pp).filter(k => k !== n);
+  const allPools = others.length > 1 ? groups.filter(g => Array.isArray(g.use) && others.every(k => g.use.includes(k))) : [];
+  for(const g of allPools){ g.use.push(n); parents.add(g.name); }
+  out.pools = allPools.map(g => g.name);
   const pools = nn => { const last = Object.keys(pp).filter(k => k !== nn).pop(); return last ? groups.filter(g => Array.isArray(g.use) && g.use.includes(last)) : []; };
   if(pats.size){
     for(const [key, inst] of pats){
@@ -105,6 +110,8 @@ function scMerge(doc, name, prov, opts){
         rules.splice(at + 1, 0, scRetarget(rules[at], gname)); out.rules++;
       }
     }
+  } else if(allPools.length){
+    out.mode = "pool";
   } else if(pools(n).length){
     // no per-subscription groups: subscriptions share pool groups (Auto, RU-Force…);
     // the new one joins the groups its neighbour (the last subscription) is in
@@ -197,7 +204,7 @@ async function subCopyDialog(src, provName){
           const txt = sum.mode === "updated"
             ? `обновятся параметры подписки «${esc(sum.name)}», группы не меняются`
             : sum.mode === "pool" ? `новая подписка «${esc(sum.name)}» — добавится в группы ${sum.parents.map(esc).join(", ")}, как соседние подписки`
-            : `новая подписка «${esc(sum.name)}»; группы: ${sum.groups.map(esc).join(", ") || "—"}${sum.parents.length ? "; в " + sum.parents.map(esc).join(", ") : ""}${sum.rules ? `; правил: ${sum.rules}` : ""}`;
+            : `новая подписка «${esc(sum.name)}»; группы: ${sum.groups.map(esc).join(", ") || "—"}${sum.parents.filter(x => !sum.pools.includes(x)).length ? "; в " + sum.parents.filter(x => !sum.pools.includes(x)).map(esc).join(", ") : ""}${sum.pools.length ? "; в общих группах: " + sum.pools.map(esc).join(", ") : ""}${sum.rules ? `; правил: ${sum.rules}` : ""}`;
           const line = txt + (t.kind === "subscription" ? ` <span class="err">— активный профиль это подписка Nikki: при её обновлении изменения могут перезаписаться</span>` : "");
           res(id, line);
           out.push({id, kind:t.kind, name:t.name, content:scDump(doc), line});
