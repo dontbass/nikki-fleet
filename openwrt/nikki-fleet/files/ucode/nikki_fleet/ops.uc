@@ -5,7 +5,7 @@
 
 import { readfile, writefile, popen, stat, lsdir, mkdir, unlink, rename, chmod } from 'fs';
 
-export const VERSION = '0.1.26';
+export const VERSION = '0.1.27';
 
 // NF_ROOT lets tests run against a fake filesystem root.
 const ROOT = getenv('NF_ROOT') ?? '';
@@ -401,8 +401,15 @@ export function write_profile(opts) {
 	const act = active_profile();
 	let activated = false;
 	if (opts.activate && !(act.kind == kind && act.name == name)) {
-		uci_set('nikki.config.profile', kind + ':' + name);
-		uci_commit('nikki');
+		const want = kind + ':' + name;
+		const set = sh(uci_cmd() + ' set ' + q('nikki.config.profile=' + want));
+		const com = sh(uci_cmd() + ' commit nikki');
+		// never report "applied" while Nikki keeps running the previous profile
+		if (uci_get('nikki.config.profile') != want)
+			return { ok: false, stage: 'activate', backup: bk,
+				error: sprintf('saved, but could not make it the active profile (uci: %s)',
+					trim((set.out ?? '') + ' ' + (com.out ?? '')) || 'value did not change'),
+				active: act };
 		activated = true;
 	}
 	const is_active = activated || (act.kind == kind && act.name == name);

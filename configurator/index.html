@@ -1271,7 +1271,8 @@ function evalRule(type, value, opts, d, ip){
 // exposes window.NF_HOST with: kind, title, canWrite, listProfiles(),
 // readProfile(kind,name), writeProfile(kind,name,content,opts), api(method,path,body).
 const HOST = (() => { try { return window.NF_HOST || (window.parent !== window && window.parent.NF_HOST) || null; } catch(e){ return null; } })();
-const host = {cur:null, profiles:[], baseline:"", busy:false, last:null};
+const host = {cur:null, profiles:[], baseline:"", busy:false, last:null, sample:false, loadErr:""};
+const hostActive = () => host.profiles.find(p => p.active) || null;
 // Look of the router's LuCI theme (Bootstrap, Argon, Material, 404-Mode…): the LuCI page
 // samples its own colors, fonts and radii (NF_HOST.theme()) and the configurator takes
 // them over, so it reads as part of LuCI rather than a page inside it.
@@ -1317,6 +1318,7 @@ function mihomoErrors(out){
 function hostResultText(r){
   if(!r) return "";
   if(r.ok) return r.reloaded ? (r.enabled ? "Сохранено и применено: Nikki включён, mihomo работает" : "Сохранено и применено: Nikki перезапущен, mihomo работает") : r.nikki_disabled ? "Сохранено. Nikki выключен — включите его, чтобы применить профиль" : (r.stage==="written" ? "Сохранено. Профиль не активен — перезапуск не нужен" : "Сохранено");
+  if(r.stage==="activate") return "Профиль сохранён, но роутер не переключился на него — работает прежний" + (r.active?.name ? " («" + r.active.name + "»)" : "") + ".\n" + (r.error || "");
   if(r.stage==="test") return "mihomo не принял конфиг, на роутере ничего не изменилось:\n" + mihomoErrors(r.output);
   if(r.rolled_back) return "mihomo не запустился с новым конфигом — вернул предыдущую версию" + (r.recovered===false ? " (внимание: mihomo не отвечает и после отката)" : "") + (r.log ? "\n" + mihomoErrors(r.log) : "");
   return r.error || "Ошибка";
@@ -1326,19 +1328,24 @@ function renderHostBar(){
   el.hidden = false;
   const cur = host.cur;
   const dirty = cur && host.baseline && $("#yaml").textContent !== host.baseline;
+  const act = hostActive();
+  const inactive = cur && cur.kind === "file" && !(act && act.kind === cur.kind && act.name === cur.name);
   const opts = host.profiles.map(p => `<option value="${esc(p.kind+":"+p.name)}"${cur && cur.kind===p.kind && cur.name===p.name ? " selected" : ""}>${p.active?"● ":""}${esc(p.kind==="subscription" ? "Подписка: "+p.label : p.name)}</option>`).join("");
   el.innerHTML = `<span class="src">${esc(HOST_LABEL)}${HOST.title ? " · " + esc(HOST.title) : ""}</span>
     <select id="hostProfile" aria-label="Профиль на роутере">${opts}<option value="__new">+ Сохранить как новый профиль…</option></select>
     <span class="${dirty?"dirty":"clean"}">${cur ? (dirty ? "● есть несохранённые изменения" : "сохранено на роутере") : ""}</span>
     <span class="grow"></span>
     <button id="hostReload" class="sm">Перечитать с роутера</button>
-    ${HOST.canWrite ? `<button id="hostSave" class="primary"${host.busy?" disabled":""}>${host.busy ? "Сохраняю…" : "Сохранить на роутер"}</button>` : `<span class="small muted">только просмотр</span>`}
+    ${host.sample ? `<button id="hostRetry" class="sm">Загрузить с роутера</button>` : ""}
+    ${HOST.canWrite && host.failed ? `<button class="primary" disabled title="Сначала загрузите конфиг роутера">Сохранение недоступно</button>` : HOST.canWrite ? `<button id="hostSave" class="primary"${host.busy?" disabled":""}>${host.busy ? "Сохраняю…" : host.sample ? "Сохранить как новый профиль…" : inactive ? "Сохранить и сделать активным" : "Сохранить на роутер"}</button>` : `<span class="small muted">только просмотр</span>`}
+    ${host.sample ? `<div class="small" style="width:100%;color:var(--warn)">Конфиг роутера не загружен${host.loadErr ? " (" + esc(host.loadErr) + ")" : ""} — показан <b>пример с вымышленными подписками</b>. ${host.failed ? "Сохранение на роутер отключено, пока его конфиг не загрузится" : "Не сохраняйте его поверх своего конфига"}: нажмите «Загрузить с роутера».</div>` : ""}
+    ${inactive ? `<div class="small" style="width:100%;color:var(--warn)">Этот профиль сейчас <b>не используется</b>: на роутере активен ${act ? "«" + esc(act.kind==="subscription" ? "подписка " + act.label : act.name) + "»" : "другой профиль"}. При сохранении он станет активным, mihomo перезапустится с ним.</div>` : ""}
     ${cur && cur.kind==="subscription" ? `<div class="small" style="width:100%;color:var(--warn)">Это профиль из подписки Nikki: при её обновлении правки пропадут. Сохраните его как новый профиль — он станет активным.</div>` : ""}
     ${host.last ? `<div class="hostres" style="width:100%;color:${host.last.ok?"var(--ok)":"var(--warn)"}">${esc(hostResultText(host.last))}</div>` : ""}`;
 }
 async function hostLoad(kind, name){
   const text = await HOST.readProfile(kind, name);
-  host.cur = {kind, name};
+  host.cur = {kind, name}; host.sample = false; host.failed = false; host.loadErr = "";
   load(text, kind==="subscription" ? "подписка " + name : name);
   host.baseline = $("#yaml").textContent;
   $("#fname").value = kind==="subscription" ? name + ".yaml" : name;
@@ -1347,16 +1354,26 @@ async function hostLoad(kind, name){
 }
 async function hostInit(){
   try{
-    const r = await HOST.listProfiles();
+    let r = null, err = null;
+    for(let i = 0; i < 3 && !r; i++){
+      try{ r = await HOST.listProfiles(); }catch(e){ err = e; if(i < 2) await new Promise(ok => setTimeout(ok, 1500)); }
+    }
+    if(!r) throw err;
     host.profiles = r.profiles || [];
     const act = r.active && r.active.kind ? r.active : (host.profiles[0] || null);
-    if(act){ await hostLoad(act.kind, act.name); }
-    else { load(SAMPLE, "пример"); renderHostBar(); flash("На роутере нет профилей — начните с примера и сохраните как новый профиль"); }
+    if(act){
+      let ok = false, err = null;
+      for(let i = 0; i < 3 && !ok; i++){
+        try{ await hostLoad(act.kind, act.name); ok = true; }catch(e){ err = e; if(i < 2) await new Promise(r => setTimeout(r, 1500)); }
+      }
+      if(!ok) throw err;
+    }
+    else { host.cur = null; load(SAMPLE, "пример"); host.sample = true; host.loadErr = "на роутере нет профилей"; renderHostBar(); flash("На роутере нет профилей — начните с примера и сохраните как новый профиль"); }
     connect(true);
-  }catch(e){ flash("Не удалось загрузить профиль с роутера: " + (e.message||e), true); load(SAMPLE, "пример"); renderHostBar(); }
+  }catch(e){ flash("Не удалось загрузить профиль с роутера: " + (e.message||e), true); host.cur = null; load(SAMPLE, "пример"); host.sample = true; host.failed = true; host.loadErr = String(e.message||e); renderHostBar(); }
 }
 async function hostSave(asNew){
-  if(!HOST || !HOST.canWrite || host.busy) return;
+  if(!HOST || !HOST.canWrite || host.busy || host.failed) return;
   let kind = host.cur?.kind || "file", name = host.cur?.name, activate = false;
   if(asNew || kind==="subscription" || !name){
     let n = (asNew || "").trim();
@@ -1364,6 +1381,12 @@ async function hostSave(asNew){
     if(!/\.ya?ml$/i.test(n)) n += ".yaml";
     if(!/^[A-Za-z0-9_.@-]+\.ya?ml$/.test(n)){ flash("Имя файла: латиница, цифры, _ . @ -", true); return; }
     kind = "file"; name = n; activate = true;
+    const ex = host.profiles.find(p => p.kind === "file" && p.name === n), act = hostActive();
+    if(ex && !confirm(`Профиль ${n} уже есть на роутере — заменить его содержимое?`)) return;
+    if(host.sample && act && !confirm(`Сейчас в редакторе пример, а не конфиг роутера.\nПрофиль ${n} станет активным вместо «${act.label || act.name}» — подписки, группы и правила из него работать перестанут.\nПродолжить?`)) return;
+  } else if(kind === "file"){
+    const act = hostActive();
+    if(!(act && act.kind === kind && act.name === name)) activate = true; // the profile being edited is the one to run
   }
   const pr = problems();
   const btn = $("#hostSave");
@@ -1377,8 +1400,12 @@ async function hostSave(asNew){
     const r = await HOST.writeProfile(kind, name, y, {activate, reload:true});
     host.last = r;
     if(r && r.ok){
-      host.cur = {kind, name}; host.baseline = y;
+      host.cur = {kind, name}; host.baseline = y; host.sample = false;
       const l = await HOST.listProfiles().catch(()=>null); if(l) host.profiles = l.profiles || host.profiles;
+      if(l && activate && !(l.active && l.active.kind === kind && l.active.name === name)){
+        host.last = {ok:false, stage:"activate", active:l.active, error:"после сохранения активным остался другой профиль"};
+        flash("Профиль сохранён, но роутер на него не переключился", true); host.busy = false; renderHostBar(); return;
+      }
       flash(r.reloaded ? "Сохранено на роутере и применено" : "Сохранено на роутере");
       setTimeout(()=>refreshLive(false).catch(()=>{}), 1500);
     } else flash(hostResultText(r).split("\n")[0], true);
@@ -1388,6 +1415,7 @@ async function hostSave(asNew){
 document.addEventListener("click", e => {
   const b = e.target.closest("button"); if(!b) return;
   if(b.id==="hostSave") hostSave();
+  if(b.id==="hostRetry"){ pushUndo(); hostInit(); }
   if(b.id==="hostReload" && host.cur){ pushUndo(); hostLoad(host.cur.kind, host.cur.name).then(()=>flash("Профиль перечитан с роутера")).catch(err=>flash(err.message, true)); }
 });
 document.addEventListener("change", e => {
@@ -1395,7 +1423,7 @@ document.addEventListener("change", e => {
   const v = e.target.value;
   if(v==="__new"){ e.target.value = host.cur ? host.cur.kind+":"+host.cur.name : ""; openDlg("newprofile"); return; }
   const i = v.indexOf(":");
-  pushUndo(); hostLoad(v.slice(0,i), v.slice(i+1)).catch(err=>flash(err.message, true));
+  pushUndo(); hostLoad(v.slice(0,i), v.slice(i+1)).catch(err=>{ flash("Не удалось открыть профиль: " + err.message, true); renderHostBar(); });
 });
 
 /* ===== Router (mihomo API) ===== */
@@ -2112,7 +2140,7 @@ function openDlg(mode, p){
   $("#pasteOk").textContent = mode==="rules" ? "Добавить" : "Загрузить";
   $("#pasteOk").hidden = mode==="show";
   $("#pasteTa").hidden = mode==="newprofile"; $("#newName").hidden = mode!=="newprofile";
-  if(mode==="newprofile"){ $("#pasteTitle").textContent = "Имя нового профиля на роутере (будет сделан активным)"; $("#pasteOk").textContent = "Сохранить"; $("#newName").value = host.cur && host.cur.kind==="file" ? host.cur.name.replace(/\.ya?ml$/,"") + "-copy.yaml" : "main.yaml"; setTimeout(()=>$("#newName").select(),0); }
+  if(mode==="newprofile"){ $("#pasteTitle").textContent = "Имя нового профиля на роутере (будет сделан активным)"; $("#pasteOk").textContent = "Сохранить"; { const has = n => host.profiles.some(p => p.kind==="file" && p.name===n); let base = host.cur && host.cur.kind==="file" ? host.cur.name.replace(/\.ya?ml$/,"") + "-copy" : "main", n = base + ".yaml", i = 2; while(has(n)) n = base + "-" + (i++) + ".yaml"; $("#newName").value = n; } setTimeout(()=>$("#newName").select(),0); }
   if(mode==="show") $("#pasteTitle").textContent = "Буфер обмена недоступен — выделите текст и скопируйте вручную (Ctrl+C)";
   $("#pasteErr").textContent = ""; $("#pasteTa").value = "";
   dlg.showModal(); $("#pasteTa").focus();

@@ -467,7 +467,7 @@ async function tabHistory(body){
   try{
     const vs = await get(`/api/routers/${r.id}/versions`);
     $("#vers").outerHTML = vs.length ? `<div class="tbl"><table><thead><tr><th>Когда</th><th>Кто</th><th>Профиль</th><th>Результат</th><th class="num">Размер</th><th></th></tr></thead><tbody>
-      ${vs.map(v => `<tr><td>${fmtDate(v.time)}</td><td>${esc(v.user||"—")}</td><td>${esc(v.name)}</td><td>${v.result==="ok" ? `<span class="ok">применён</span>` : v.result==="rolled_back" ? `<span class="err">откат</span>` : `<span class="err">отклонён</span>`}</td><td class="num">${bytes(v.size)}</td>
+      ${vs.map(v => `<tr><td>${fmtDate(v.time)}</td><td>${esc(v.user||"—")}</td><td>${esc(v.name)}</td><td>${v.result==="ok" ? `<span class="ok">применён</span>` : v.result==="saved" ? `<span class="muted" title="Профиль сохранён, но он не активен на роутере — mihomo работает с другим">сохранён, не активен</span>` : v.result==="rolled_back" ? `<span class="err">откат</span>` : `<span class="err">отклонён</span>`}</td><td class="num">${bytes(v.size)}</td>
       <td><div class="row"><button data-ver="${esc(v.id)}">Показать</button>${canEdit() && r.online ? `<button data-restore-ver="${esc(v.id)}" data-name="${esc(v.name)}" data-kind="${esc(v.kind)}">Вернуть</button>` : ""}</div></td></tr>`).join("")}
     </tbody></table></div>` : `<div class="muted small" id="vers">Пока нет: версии появятся после первого сохранения конфига через панель.</div>`;
   }catch(e){ $("#vers").textContent = e.message; }
@@ -492,8 +492,9 @@ document.addEventListener("click", async e => {
     rv.disabled = true; rv.textContent = "Применяю…";
     try{
       const d = await get(`/api/routers/${r.id}/versions/${rv.dataset.restoreVer}`);
-      const w = await cmd(r.id, "profile.write", {kind: rv.dataset.kind, name: rv.dataset.name, content: d.content, reload: true});
-      flash(w.ok ? "Версия применена на роутере" : (w.error || "Роутер не принял версию"), !w.ok);
+      // returning to a version means running it: the profile becomes the active one
+      const w = await cmd(r.id, "profile.write", {kind: rv.dataset.kind, name: rv.dataset.name, content: d.content, activate: rv.dataset.kind !== "subscription", reload: true});
+      flash(w.ok ? `Версия применена: ${rv.dataset.name} — активный профиль` : (w.stage === "test" ? "mihomo не принял эту версию" : w.rolled_back ? "mihomo не запустился — возвращён прежний профиль" : (w.error || "Роутер не принял версию")), !w.ok);
     }catch(err){ flash(err.message, true); }
     tabHistory($("#tabBody"));
   }

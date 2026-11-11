@@ -411,6 +411,20 @@ func (a *App) recordChange(u *User, rt *Router, typ string, args map[string]any,
 		detail = "mihomo " + strings.ToUpper(m) + " " + p
 	}
 	result := "ok"
+	if res.OK {
+		// saved but not the active profile: nothing was applied
+		var d struct {
+			OK    *bool  `json:"ok"`
+			Stage string `json:"stage"`
+		}
+		if json.Unmarshal(res.Data, &d) == nil {
+			if d.OK != nil && !*d.OK {
+				result = "error"
+			} else if d.Stage == "written" {
+				result = "saved"
+			}
+		}
+	}
 	if !res.OK {
 		result = "error"
 		var d struct {
