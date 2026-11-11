@@ -35,6 +35,7 @@ function scMerge(doc, name, prov, opts){
     const keep = pp[same];
     pp[same] = p;
     if(keep?.path && !opts?.copyPath) p.path = keep.path; // keep the target's cache file
+    out.same = JSON.stringify(keep) === JSON.stringify(p);
     out.mode = "updated"; out.name = same;
     return out;
   }
@@ -165,11 +166,11 @@ async function subCopyDialog(src, provName){
     }).join("") : `<div class="note">Других роутеров в панели нет.</div>`}</div>
     <label class="row small"><input type="checkbox" id="scHwid" style="width:auto"> новый x-hwid для каждого целевого роутера (по умолчанию — тот же, что у источника)</label>
     <div class="err small" id="scErr"></div>
-    <div class="row end"><button data-close>Закрыть</button><button id="scPrev">Показать изменения</button><button class="primary" id="scGo" disabled>Копировать</button></div>`, body => {
+    <div class="row end"><button data-close>Закрыть</button><button id="scPrev">Показать изменения</button><button class="primary" id="scGo">Копировать</button></div>`, body => {
     let plan = null;
     const chosen = () => [...body.querySelectorAll(".sclist input:checked")].map(x => x.value);
     const res = (id, html, cls) => { const e = body.querySelector(`[data-res="${CSS.escape(id)}"]`); if(e){ e.innerHTML = html; e.className = "scres small " + (cls||""); } };
-    body.addEventListener("change", e => { if(e.target.matches(".sclist input, #scHwid")){ plan = null; $("#scGo").disabled = true; } });
+    body.addEventListener("change", e => { if(e.target.matches(".sclist input, #scHwid")){ plan = null; } });
 
     async function prepare(){
       $("#scErr").textContent = "";
@@ -185,36 +186,43 @@ async function subCopyDialog(src, provName){
           const t = await scActiveProfile(id);
           const doc = jsyaml.load(t.content) || {};
           const sum = scMerge(doc, provName, prov, {newHwid: $("#scHwid").checked});
+          if(sum.same){ res(id, `подписка «${esc(sum.name)}» уже такая же — менять нечего`, "ok"); continue; }
           const txt = sum.mode === "updated"
             ? `обновятся параметры подписки «${esc(sum.name)}», группы не меняются`
             : `новая подписка «${esc(sum.name)}»; группы: ${sum.groups.map(esc).join(", ") || "—"}${sum.parents.length ? "; в " + sum.parents.map(esc).join(", ") : ""}${sum.rules ? `; правил: ${sum.rules}` : ""}`;
-          res(id, txt + (t.kind === "subscription" ? ` <span class="err">— активный профиль это подписка Nikki: при её обновлении изменения могут перезаписаться</span>` : ""));
-          out.push({id, kind:t.kind, name:t.name, content:scDump(doc)});
+          const line = txt + (t.kind === "subscription" ? ` <span class="err">— активный профиль это подписка Nikki: при её обновлении изменения могут перезаписаться</span>` : "");
+          res(id, line);
+          out.push({id, kind:t.kind, name:t.name, content:scDump(doc), line});
         }catch(e){ res(id, esc(e.message), "err"); }
       }
       return out;
     }
     $("#scPrev").onclick = async e => {
       const b = e.currentTarget; b.disabled = true;
-      try{ plan = await prepare(); $("#scGo").disabled = !plan?.length; }
+      try{ plan = await prepare(); if(plan && !plan.length) $("#scErr").textContent = "Записывать нечего"; }
       catch(err){ $("#scErr").textContent = err.message; }
       b.disabled = false;
     };
     $("#scGo").onclick = async e => {
-      const b = e.currentTarget; if(!plan?.length) return;
+      const b = e.currentTarget;
       b.disabled = true; $("#scPrev").disabled = true;
+      const done = () => { b.disabled = false; $("#scPrev").disabled = false; };
+      // without a preview: prepare now (the summary is shown in the same rows)
+      if(!plan){ try{ plan = await prepare(); }catch(err){ $("#scErr").textContent = err.message; return done(); } }
+      if(!plan?.length){ if(plan) $("#scErr").textContent = "Записывать нечего"; plan = null; return done(); }
       let ok = 0;
       for(const p of plan){
-        res(p.id, "сохраняю и проверяю…");
+        const st = (h, c) => res(p.id, p.line + "<br>" + h, c);
+        st("сохраняю и проверяю…");
         try{
           const d = await cmd(p.id, "profile.write", {kind:p.kind, name:p.name, content:p.content, activate:false, reload:true});
-          if(d.ok){ ok++; res(p.id, d.nikki_disabled ? "сохранено ✓ (Nikki выключен — применится при включении)" : "готово ✓ — mihomo перезапущен", "ok"); }
-          else res(p.id, esc(d.stage === "test" ? "mihomo не принял конфиг, ничего не изменено: " + String(d.output || "").split("\n").filter(Boolean).slice(-2).join(" ")
+          if(d.ok){ ok++; st(d.nikki_disabled ? "сохранено ✓ (Nikki выключен — применится при включении)" : "готово ✓ — mihomo перезапущен", "ok"); }
+          else st(esc(d.stage === "test" ? "mihomo не принял конфиг, ничего не изменено: " + String(d.output || "").split("\n").filter(Boolean).slice(-2).join(" ")
             : d.stage === "reload" ? "mihomo не запустился с новым конфигом — возвращена прежняя версия" : (d.error || "ошибка")), "err");
-        }catch(err){ res(p.id, esc(err.message), "err"); }
+        }catch(err){ st(esc(err.message), "err"); }
       }
       flash(`Скопировано: ${ok} из ${plan.length}`, ok !== plan.length);
-      plan = null; $("#scPrev").disabled = false;
+      plan = null; done();
     };
   });
 }
