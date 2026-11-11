@@ -949,6 +949,36 @@ function subPatterns(){
   for(const [k, v] of pats) if(!v.length) pats.delete(k);
   return pats;
 }
+// Deleting a subscription also removes its own groups ("EOF-Best", "EOF-Manual":
+// named after it and using it). Shared groups (Auto, RU-Force…) only lose it from
+// "use". Rules that led into a removed group are dropped when the same rule exists
+// for a sibling subscription, otherwise they go to the group that held it (PROXY).
+function removeSubscription(p){
+  const pn = p.name.trim(), lo = pn.toLowerCase();
+  const own = pn ? groupsS.filter(g => {
+    const gn = g.data.name, gl = gn.toLowerCase();
+    if(!p.groups.has(gn) || !gl.includes(lo) || gl === lo) return false;
+    // a longer subscription name in the group name owns it (VPN vs SilVPN)
+    return !provs.some(o => o !== p && o.name.length > pn.length && o.name.toLowerCase().includes(lo) && gl.includes(o.name.toLowerCase()) && o.groups.has(gn));
+  }) : [];
+  const gone = new Set(own.map(g => g.data.name));
+  // where each removed group sat (for re-targeting unique rules)
+  const parentOf = {};
+  for(const g of groupsS) if(!gone.has(g.data.name)) for(const m of g.data.proxies || []) if(gone.has(m) && !parentOf[m]) parentOf[m] = g.data.name;
+  provs.splice(provs.indexOf(p), 1);
+  groupsS = groupsS.filter(g => !gone.has(g.data.name));
+  for(const g of groupsS) if(g.data.proxies) g.data.proxies = g.data.proxies.filter(m => !gone.has(m));
+  for(const n of gone) provs.forEach(o => o.groups.delete(n));
+  let dropped = 0, moved = 0;
+  const key = r => [r.type, r.value, ...(r.opts || [])].join("\u0001");
+  rules = rules.filter(r => {
+    if(!gone.has(r.target)) return true;
+    if(rules.some(o => o !== r && !gone.has(o.target) && key(o) === key(r))){ dropped++; return false; }
+    if(parentOf[r.target]){ r.target = parentOf[r.target]; moved++; return true; }
+    return true; // nowhere to send it: stays, marked as broken
+  });
+  return {groups:[...gone], dropped, moved};
+}
 const linkRe = /\bhttps?:\/\/[^\s"'<>]+/g;
 
 function quickAddText(text){
@@ -1865,7 +1895,9 @@ main.addEventListener("click", async e => {
   if(p){
     const i = provs.indexOf(p);
     switch(act){
-      case "del": pushUndo(); provs.splice(i,1); render(); flash(`Подписка «${p.name}» удалена`); break;
+      case "del": { pushUndo(); const x = removeSubscription(p); render();
+        flash(`Подписка «${p.name}» удалена` + (x.groups.length ? ` вместе с группами: ${x.groups.join(", ")}` : "")
+          + (x.dropped ? `; повторяющихся правил убрано: ${x.dropped}` : "") + (x.moved ? `; правил переведено в главную группу: ${x.moved}` : "") + " («↶ Отменить» — вернуть)"); } break;
       case "up": if(i>0){ pushUndo(); [provs[i-1],provs[i]]=[provs[i],provs[i-1]]; render(); } break;
       case "down": if(i<provs.length-1){ pushUndo(); [provs[i+1],provs[i]]=[provs[i],provs[i+1]]; render(); } break;
       case "hwid": pushUndo(); p.hdr.hwid = uuid(); render(); break;
