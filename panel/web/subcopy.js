@@ -74,6 +74,7 @@ function scMerge(doc, name, prov, opts){
   for(const [k, v] of pats) if(!v.length) pats.delete(k);
 
   const parents = new Set();
+  const pools = nn => { const last = Object.keys(pp).filter(k => k !== nn).pop(); return last ? groups.filter(g => Array.isArray(g.use) && g.use.includes(last)) : []; };
   if(pats.size){
     for(const [key, inst] of pats){
       const gname = key.replace("{N}", n);
@@ -104,6 +105,11 @@ function scMerge(doc, name, prov, opts){
         rules.splice(at + 1, 0, scRetarget(rules[at], gname)); out.rules++;
       }
     }
+  } else if(pools(n).length){
+    // no per-subscription groups: subscriptions share pool groups (Auto, RU-Force…);
+    // the new one joins the groups its neighbour (the last subscription) is in
+    for(const g of pools(n)){ g.use.push(n); parents.add(g.name); }
+    out.mode = "pool";
   } else {
     const hc = p["health-check"]?.url || "http://www.gstatic.com/generate_204";
     for(const d of [{name:`${n}-Best`, type:"url-test", url:hc, interval:300, tolerance:50, use:[n]}, {name:`${n}-Manual`, type:"select", use:[n]}]){
@@ -190,6 +196,7 @@ async function subCopyDialog(src, provName){
           if(sum.same){ res(id, `подписка «${esc(sum.name)}» уже такая же — менять нечего`, "ok"); continue; }
           const txt = sum.mode === "updated"
             ? `обновятся параметры подписки «${esc(sum.name)}», группы не меняются`
+            : sum.mode === "pool" ? `новая подписка «${esc(sum.name)}» — добавится в группы ${sum.parents.map(esc).join(", ")}, как соседние подписки`
             : `новая подписка «${esc(sum.name)}»; группы: ${sum.groups.map(esc).join(", ") || "—"}${sum.parents.length ? "; в " + sum.parents.map(esc).join(", ") : ""}${sum.rules ? `; правил: ${sum.rules}` : ""}`;
           const line = txt + (t.kind === "subscription" ? ` <span class="err">— активный профиль это подписка Nikki: при её обновлении изменения могут перезаписаться</span>` : "");
           res(id, line);

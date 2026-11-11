@@ -997,7 +997,7 @@ function quickAddText(text){
   const sec = document.querySelector(`.prov[data-id="${last.p.id}"]`);
   if(sec){ sec.classList.add("fresh"); sec.scrollIntoView({block:"center", behavior:"smooth"}); const ni = document.getElementById("n-"+last.p.id); if(ni){ ni.focus(); ni.select(); } }
   flash(done.length > 1 ? `Добавлено подписок: ${done.length}` :
-    `«${last.p.name}»: ${last.groups.length ? "группы " + last.groups.join(", ") : "без новых групп"}${last.parents.length ? " → в " + last.parents.join(", ") : ""}${last.rules ? `, правил: ${last.rules}` : ""}. Имя можно поменять — группы переименуются следом.`);
+    `«${last.p.name}»: ${last.groups.length ? "группы " + last.groups.join(", ") + (last.parents.length ? " → в " + last.parents.join(", ") : "") : last.parents.length ? "добавлена в группы " + last.parents.join(", ") : "без групп"}${last.rules ? `, правил: ${last.rules}` : ""}. Имя можно поменять — группы переименуются следом.`);
 }
 
 function quickAddOne(url){
@@ -1053,6 +1053,10 @@ function quickAddOne(url){
         ruleCount++;
       }
     }
+  } else if(tpl && tpl.groups.size){
+    // no per-subscription groups: subscriptions share pool groups (Auto, RU-Force…
+    // all "use" them) — the new one joins the same groups as its neighbour
+    for(const gn of tpl.groups) if(groupNames().includes(gn)){ p.groups.add(gn); parents.add(gn); }
   } else {
     // nothing to copy from: the classic pair, both offered in the main selector
     const hc = p.extra["health-check"]?.url || "http://www.msftconnecttest.com/connecttest.txt";
