@@ -165,12 +165,13 @@ async function subCopyDialog(src, provName){
       return `<label class="scitem${can ? "" : " off"}"><input type="checkbox" value="${esc(t.id)}"${can ? "" : " disabled"}><b>${esc(t.name)}</b><span class="small muted">${!t.online ? "не в сети" : !can ? "только просмотр" : ""}</span><span class="scres small" data-res="${esc(t.id)}"></span></label>`;
     }).join("") : `<div class="note">Других роутеров в панели нет.</div>`}</div>
     <label class="row small"><input type="checkbox" id="scHwid" style="width:auto"> новый x-hwid для каждого целевого роутера (по умолчанию — тот же, что у источника)</label>
+    <div class="small muted">Сначала «Показать изменения» — после проверки станет доступна «Копировать».</div>
     <div class="err small" id="scErr"></div>
-    <div class="row end"><button data-close>Закрыть</button><button id="scPrev">Показать изменения</button><button class="primary" id="scGo">Копировать</button></div>`, body => {
+    <div class="row end"><button data-close>Закрыть</button><button id="scPrev">Показать изменения</button><button class="primary" id="scGo" disabled title="Сначала «Показать изменения»">Копировать</button></div>`, body => {
     let plan = null;
     const chosen = () => [...body.querySelectorAll(".sclist input:checked")].map(x => x.value);
     const res = (id, html, cls) => { const e = body.querySelector(`[data-res="${CSS.escape(id)}"]`); if(e){ e.innerHTML = html; e.className = "scres small " + (cls||""); } };
-    body.addEventListener("change", e => { if(e.target.matches(".sclist input, #scHwid")){ plan = null; } });
+    body.addEventListener("change", e => { if(e.target.matches(".sclist input, #scHwid")){ plan = null; $("#scGo").disabled = true; } });
 
     async function prepare(){
       $("#scErr").textContent = "";
@@ -199,17 +200,15 @@ async function subCopyDialog(src, provName){
     }
     $("#scPrev").onclick = async e => {
       const b = e.currentTarget; b.disabled = true;
-      try{ plan = await prepare(); if(plan && !plan.length) $("#scErr").textContent = "Записывать нечего"; }
+      try{ plan = await prepare(); if(plan && !plan.length) $("#scErr").textContent = "Записывать нечего"; $("#scGo").disabled = !plan?.length; }
       catch(err){ $("#scErr").textContent = err.message; }
       b.disabled = false;
     };
     $("#scGo").onclick = async e => {
       const b = e.currentTarget;
       b.disabled = true; $("#scPrev").disabled = true;
-      const done = () => { b.disabled = false; $("#scPrev").disabled = false; };
-      // without a preview: prepare now (the summary is shown in the same rows)
-      if(!plan){ try{ plan = await prepare(); }catch(err){ $("#scErr").textContent = err.message; return done(); } }
-      if(!plan?.length){ if(plan) $("#scErr").textContent = "Записывать нечего"; plan = null; return done(); }
+      const done = () => { $("#scPrev").disabled = false; }; // Копировать stays off until the next preview
+      if(!plan?.length) return done();
       let ok = 0;
       for(const p of plan){
         const st = (h, c) => res(p.id, p.line + "<br>" + h, c);
