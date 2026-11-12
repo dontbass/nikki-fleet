@@ -312,3 +312,39 @@ button.small{font-size:12px;min-height:26px;padding:3px 8px}
 .scitem.off{opacity:.55;cursor:default}
 .scitem .scres{grid-column:2 / -1}
 .scitem .scres:empty{display:none}
+
+/* ---------- SSH: servers and terminal ---------- */
+.pill.bad{color:#e5484d;background:color-mix(in srgb,#e5484d 13%,transparent)}
+.hosts{display:grid;gap:12px;margin:16px 0}
+.hostcard{background:var(--panel);border-radius:14px;box-shadow:var(--shadow);padding:14px 16px;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:14px;align-items:center}
+.hostcard .ic{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;color:#fff;background:var(--grad-main)}
+.hostcard .ic svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.hc-main{display:flex;flex-direction:column;gap:2px;min-width:0}
+.hc-main>*{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hc-main svg.ti{width:13px;height:13px;vertical-align:-2px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+@media (max-width:640px){.hostcard{grid-template-columns:auto minmax(0,1fr)}.hostcard>.row{grid-column:1/-1}}
+.termhead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--grad);color:#fff;border-radius:14px;padding:10px 14px;margin-bottom:12px;box-shadow:0 8px 24px rgba(11,31,77,.25)}
+.termhead .btn.ghost{color:#fff}
+.th-title{display:flex;flex-direction:column;min-width:0;flex:1 1 160px}
+.th-title b{font-size:17px}
+.th-title span{opacity:.85;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.termhead .pill{background:rgba(255,255,255,.16);color:#fff}
+.termhead .pill.on{background:rgba(73,209,125,.25)}
+.termhead .pill.bad{background:rgba(229,72,77,.35);color:#fff}
+.th-tools button{background:rgba(255,255,255,.14);color:#fff;border-color:rgba(255,255,255,.25)}
+.th-tools button.danger{background:rgba(229,72,77,.85);border-color:transparent}
+.termlogin{max-width:560px}
+.termlogin textarea{font-family:var(--f-mono);font-size:12px}
+.seg{display:inline-flex;background:var(--soft);border-radius:10px;padding:3px;gap:3px;margin-bottom:10px}
+.seg button{border:0;background:transparent;padding:6px 16px;border-radius:8px;font-weight:600;color:var(--muted)}
+.seg button[aria-selected="true"]{background:var(--panel);color:var(--text, inherit);box-shadow:var(--shadow)}
+.termwrap{background:#0b1426;border-radius:14px;padding:8px;box-shadow:var(--shadow);display:flex;flex-direction:column}
+#tBox{height:calc(100vh - 230px);min-height:320px}
+.termwrap:fullscreen{border-radius:0;padding:6px}
+.termwrap:fullscreen #tBox{height:calc(100vh - 60px)}
+.xkeys{display:none;gap:6px;overflow-x:auto;padding:8px 2px 2px;scrollbar-width:none}
+.xkeys button{flex:0 0 auto;min-width:42px;padding:7px 10px;border-radius:8px;background:#18243d;color:#dbe4f3;border:1px solid #2a3a5c;font-family:var(--f-mono);font-size:13px}
+.xkeys button.on{background:#2b4f86;border-color:#5a9cff}
+@media (pointer:coarse),(max-width:640px){.xkeys{display:flex}#tBox{height:calc(100vh - 280px)}}
+.termhead>a.btn.ghost{background:rgba(255,255,255,.16);color:#fff;border-color:rgba(255,255,255,.25)}
+@media (max-width:640px){.top .nl{display:none}}

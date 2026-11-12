@@ -724,6 +724,13 @@ func (a *App) adminDeleteUser(w http.ResponseWriter, r *http.Request, u *User) {
 			}
 		}
 		s.Sessions = ss
+		hs := s.Hosts[:0]
+		for _, x := range s.Hosts {
+			if x.OwnerID != id {
+				hs = append(hs, x)
+			}
+		}
+		s.Hosts = hs
 		s.audit(u.ID, "", "user.deleted", id)
 		return nil
 	})

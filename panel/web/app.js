@@ -134,6 +134,7 @@ const IC = {
   up:'<path d="M12 19V5M5 12l7-7 7 7"/>',
   sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   moon:'<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
+  term:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M12.5 15H17"/>',
   auto:'<circle cx="12" cy="12" r="9"/><path d="M12 3v18" /><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/>',
 };
 const icon = (k, cls) => `<svg viewBox="0 0 24 24" aria-hidden="true" class="${cls||""}">${IC[k]}</svg>`;
@@ -173,7 +174,7 @@ function renderNav(){
   if(!S.me){ n.innerHTML = ""; return; }
   clearWallpaper();
   const t = themeGet(), tl = {auto:"Тема: как в системе", light:"Тема: светлая", dark:"Тема: тёмная"}[t];
-  n.innerHTML = `<button class="ghost" id="themeBtn" title="${tl}" aria-label="${tl}">${icon(t==="auto" ? "auto" : t==="light" ? "sun" : "moon", "ti")}</button><a class="btn ghost" href="#/account">${esc(S.me.username)}${S.me.is_admin ? " · админ" : ""}</a><button class="ghost" id="logout">Выйти</button>`;
+  n.innerHTML = `<button class="ghost" id="themeBtn" title="${tl}" aria-label="${tl}">${icon(t==="auto" ? "auto" : t==="light" ? "sun" : "moon", "ti")}</button>${S.me.is_admin ? `<a class="btn ghost" href="#/hosts" title="SSH к вашим серверам">${icon("term","ti")}<span class="nl"> Серверы</span></a>` : ""}<a class="btn ghost" href="#/account">${esc(S.me.username)}${S.me.is_admin ? " · админ" : ""}</a><button class="ghost" id="logout">Выйти</button>`;
 }
 document.addEventListener("click", async e => {
   if(e.target.closest("#logout")){ await post("/api/auth/logout"); S.me = null; location.hash = "#/"; boot(); }
@@ -631,12 +632,22 @@ function handleErr(e){
 function route(){
   if(!S.me) return;
   const h = location.hash.replace(/^#/, "") || "/";
+  const t = h.match(/^\/hosts\/([A-Za-z0-9]+)$/);
+  if(!t) sshClose();
+  if(t) return renderTerm(t[1]);
+  if(h === "/hosts") return renderHosts();
   const m = h.match(/^\/r\/([A-Za-z0-9]+)(?:\/([a-z]+))?/);
   if(m) return renderRouter(m[1], m[2]);
   if(h === "/account") return renderAccount();
   renderFleet();
 }
-window.addEventListener("hashchange", () => { if(dlg.open) dlg.close(); route(); });
+let prevHash = location.hash;
+window.addEventListener("hashchange", () => {
+  // leaving an open SSH session: ask first
+  if(sshSess?.connected && !/^#\/hosts\/[A-Za-z0-9]+$/.test(location.hash) && !confirm("Закрыть SSH-сессию?")){ history.replaceState(null, "", prevHash); return; }
+  prevHash = location.hash;
+  if(dlg.open) dlg.close(); route();
+});
 
 async function boot(){
   clearTimers();

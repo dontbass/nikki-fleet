@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-var version = "0.1.29"
+var version = "0.1.30"
 
 //go:embed web
 var webFS embed.FS
@@ -139,6 +139,15 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/routers/{id}/audit", a.requireUser(a.routerAudit))
 
 	// admin
+	// SSH terminal to the owner's servers
+	mux.HandleFunc("GET /api/hosts", a.requireUser(a.listHosts))
+	mux.HandleFunc("POST /api/hosts", a.requireUser(a.createHost))
+	mux.HandleFunc("GET /api/hosts/audit", a.requireUser(a.hostAudit))
+	mux.HandleFunc("PATCH /api/hosts/{id}", a.requireUser(a.patchHost))
+	mux.HandleFunc("DELETE /api/hosts/{id}", a.requireUser(a.deleteHost))
+	mux.HandleFunc("POST /api/hosts/{id}/forget-key", a.requireUser(a.forgetHostKey))
+	mux.HandleFunc("GET /api/hosts/{id}/term", a.requireUser(a.sshTerm))
+
 	mux.HandleFunc("GET /api/admin/users", a.requireUser(a.adminUsers))
 	mux.HandleFunc("POST /api/admin/users", a.requireUser(a.adminCreateUser))
 	mux.HandleFunc("DELETE /api/admin/users/{id}", a.requireUser(a.adminDeleteUser))

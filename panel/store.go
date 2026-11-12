@@ -74,6 +74,21 @@ type ConfigVersion struct {
 	Result   string    `json:"result"`
 }
 
+// Host is a server (VPS) its owner opens an SSH terminal to from the panel.
+// No password or key is ever stored: they are typed for each session. The
+// server's host key is pinned on first use.
+type Host struct {
+	ID       string    `json:"id"`
+	OwnerID  string    `json:"owner_id"`
+	Name     string    `json:"name"`
+	Addr     string    `json:"addr"`
+	Port     int       `json:"port"`
+	User     string    `json:"user"`
+	HostKey  string    `json:"host_key,omitempty"` // authorized_keys format, pinned on first connect
+	Created  time.Time `json:"created"`
+	LastUsed time.Time `json:"last_used,omitempty"`
+}
+
 type Settings struct {
 	Registration string `json:"registration"` // open | closed
 	Wallpaper    string `json:"wallpaper"`    // "" = Bing picture of the day on the login page, "off"
@@ -87,6 +102,7 @@ type state struct {
 	Codes    []*EnrollCode    `json:"codes"`
 	Audit    []*AuditEntry    `json:"audit"`
 	Versions []*ConfigVersion `json:"versions"`
+	Hosts    []*Host          `json:"hosts"`
 	Settings Settings         `json:"settings"`
 }
 
