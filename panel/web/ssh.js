@@ -26,7 +26,7 @@ async function renderHosts(){
   const ACT = {"ssh.connect":"подключение", "ssh.disconnect":"отключение", "ssh.failed":"ошибка входа", "ssh.hostkey_trusted":"ключ сервера закреплён",
     "ssh.hostkey_mismatch":"ключ сервера НЕ совпал", "ssh.hostkey_forgotten":"ключ сервера сброшен", "ssh.host_added":"сервер добавлен", "ssh.host_deleted":"сервер удалён"};
   app.innerHTML = `
-    <div class="fleethero"><div><h1>Серверы</h1><div class="small">SSH-терминал к вашим VPS прямо из панели. Пароль или ключ вводится при каждом подключении и нигде не сохраняется.</div></div>
+    <div class="fleethero slim"><div class="txt"><h1>Серверы</h1><div class="small">SSH-терминал к вашим VPS прямо из панели. Пароль или ключ вводится при каждом подключении и нигде не сохраняется.</div></div>
       <button class="primary" id="hAdd">+ Добавить сервер</button></div>
     ${hosts.length ? `<div class="hosts">${hosts.map(h => `
       <div class="hostcard">

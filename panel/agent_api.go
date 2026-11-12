@@ -113,6 +113,7 @@ func (a *App) agentPoll(w http.ResponseWriter, r *http.Request) {
 		if len(req.Status) > 0 && string(req.Status) != "null" {
 			rt.Status = req.Status
 			rt.StatusAt = time.Now()
+			hist.record(rt.ID, req.Status)
 		}
 		for _, e := range req.Events {
 			s.audit("", rt.ID, "agent."+e.Type, strings.TrimSpace(e.Message+" "+e.Profile))

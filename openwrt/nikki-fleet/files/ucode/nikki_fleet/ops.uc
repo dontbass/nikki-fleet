@@ -5,7 +5,7 @@
 
 import { readfile, writefile, popen, stat, lsdir, mkdir, unlink, rename, chmod } from 'fs';
 
-export const VERSION = '0.1.31';
+export const VERSION = '0.1.32';
 
 // NF_ROOT lets tests run against a fake filesystem root.
 const ROOT = getenv('NF_ROOT') ?? '';
@@ -647,6 +647,32 @@ function meminfo() {
 	return { total: g('MemTotal'), available: g('MemAvailable') };
 }
 
+// for the fleet cards: CPU cores, hottest thermal zone (°C), DHCP clients
+function hw_info() {
+	let cpus = 0;
+	for (let l in split(readfile('/proc/cpuinfo') ?? '', '\n'))
+		if (match(l, /^processor[ \t]*:/))
+			cpus++;
+	let temp = null;
+	for (let i = 0; i < 16; i++) {
+		const t = readfile(sprintf('/sys/class/thermal/thermal_zone%d/temp', i));
+		if (t == null)
+			break;
+		const c = +trim(t) / 1000;
+		if (c > 0 && c < 150 && (temp == null || c > temp))
+			temp = c;
+	}
+	let clients = null;
+	const leases = readfile('/tmp/dhcp.leases');
+	if (leases != null) {
+		clients = 0;
+		for (let l in split(leases, '\n'))
+			if (length(trim(l)))
+				clients++;
+	}
+	return { cpus: cpus || null, temp: temp != null ? int(temp * 10 + 0.5) / 10 : null, clients: clients };
+}
+
 function board() {
 	const r = sh('ubus call system board');
 	if (r.code == 0) {
@@ -747,6 +773,7 @@ export function status(full) {
 		time: time(),
 		flash: flash_info(),
 		ui: ui_info(),
+		hw: hw_info(),
 	};
 	if (type(out.nikki.profile) == 'object')
 		delete out.nikki.profile.path;

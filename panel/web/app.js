@@ -9,8 +9,12 @@ const S = {me:null, info:null, routers:[], router:null, tab:"overview", timers:[
 
 /* ---------- API ---------- */
 async function req(method, path, body){
-  const r = await fetch(path, {method, headers:{"X-NF":"1", ...(body!==undefined?{"Content-Type":"application/json"}:{})},
-    body: body!==undefined ? JSON.stringify(body) : undefined, credentials:"same-origin", cache:"no-store"});
+  let r;
+  try{
+    r = await fetch(path, {method, headers:{"X-NF":"1", ...(body!==undefined?{"Content-Type":"application/json"}:{})},
+      body: body!==undefined ? JSON.stringify(body) : undefined, credentials:"same-origin", cache:"no-store"});
+  }catch(e){ window.netState?.(false); throw new Error("нет связи с панелью"); }
+  window.netState?.(r.status < 500);
   let j = null; try{ j = await r.json(); }catch(e){}
   if(!r.ok){ const e = new Error(j?.error || ("HTTP " + r.status)); e.status = r.status; throw e; }
   return j;
@@ -143,7 +147,7 @@ function stat(label, value, detail, ic, grad){
 }
 
 /* ---------- theme: auto / light / dark ---------- */
-function themeGet(){ try{ return localStorage.getItem("nf.theme") || "auto"; }catch(e){ return "auto"; } }
+function themeGet(){ try{ return localStorage.getItem("nf.theme") || "dark"; }catch(e){ return "dark"; } }
 function themeApply(t){
   const el = document.documentElement;
   if(t === "light" || t === "dark") el.dataset.theme = t; else delete el.dataset.theme;
@@ -174,7 +178,14 @@ function renderNav(){
   if(!S.me){ n.innerHTML = ""; return; }
   clearWallpaper();
   const t = themeGet(), tl = {auto:"Тема: как в системе", light:"Тема: светлая", dark:"Тема: тёмная"}[t];
-  n.innerHTML = `<button class="ghost" id="themeBtn" title="${tl}" aria-label="${tl}">${icon(t==="auto" ? "auto" : t==="light" ? "sun" : "moon", "ti")}</button>${S.me.is_admin ? `<a class="btn ghost" href="#/hosts" title="SSH к вашим серверам">${icon("term","ti")}<span class="nl"> Серверы</span></a>` : ""}<a class="btn ghost" href="#/account">${esc(S.me.username)}${S.me.is_admin ? " · админ" : ""}</a><button class="ghost" id="logout">Выйти</button>`;
+  const ini = esc((S.me.username || "?").slice(0, 1).toUpperCase());
+  n.innerHTML = `<span class="net ok" id="netState" title="Связь с панелью есть"><i></i><span>онлайн</span></span>
+    ${S.me.is_admin ? `<a class="btn ghost" href="#/hosts" title="SSH к вашим серверам">${icon("term","ti")}<span class="nl"> Серверы</span></a>` : ""}
+    <span class="bellwrap"><button class="ghost icon" id="bell" aria-haspopup="true" aria-expanded="false" title="Уведомления">${icon("bell","ti")}<span class="bdg" hidden></span></button><div class="menu nmenu" id="bellMenu" hidden></div></span>
+    <button class="ghost icon" id="themeBtn" title="${tl}" aria-label="${tl}">${icon(t==="auto" ? "auto" : t==="light" ? "sun" : "moon", "ti")}</button>
+    <a class="btn ghost user" href="#/account" title="Учётная запись"><span class="ava">${ini}</span><span class="nl">${esc(S.me.username)}${S.me.is_admin ? `<small>админ</small>` : ""}</span></a>
+    <button class="ghost icon" id="logout" title="Выйти" aria-label="Выйти"><svg viewBox="0 0 24 24" class="ti" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l-4-4 4-4M6 12h10"/></svg></button>`;
+  window.drawBell?.();
 }
 document.addEventListener("click", async e => {
   if(e.target.closest("#logout")){ await post("/api/auth/logout"); S.me = null; location.hash = "#/"; boot(); }
@@ -226,56 +237,6 @@ function renderAuth(){
 }
 
 /* ---------- fleet list ---------- */
-function routerCard(r){
-  const st = statusOf(r), b = st.board || {}, nk = st.nikki || {};
-  const subs = (st.providers || []).filter(p => p.sub || p.count).slice(0, 4);
-  return `<a class="card ${r.online ? "on" : "off"}" href="#/r/${r.id}">
-    <div class="spread"><span class="name">${esc(r.name)}</span>${r.online ? `<span class="pill on">в сети</span>` : `<span class="pill off">не в сети · ${ago(r.last_seen)}</span>`}</div>
-    <div class="meta">
-      ${b.model ? `<span>${esc(b.model)}</span>` : ""}${b.release ? `<span>OpenWrt ${esc(b.release)}</span>` : ""}
-      ${st.mihomo?.version ? `<span>mihomo ${esc(st.mihomo.version)}</span>` : ""}
-      ${st.uptime ? `<span>аптайм ${dur(st.uptime)}</span>` : ""}
-    </div>
-    <div class="meta">
-      ${nk.profile?.name ? `<span>профиль ${esc(nk.profile.name)}</span>` : ""}
-      ${st.nikki ? (nk.running ? `<span class="ok">Nikki работает</span>` : `<span class="err">Nikki остановлен</span>`) : `<span>статус ещё не получен</span>`}
-      ${r.role !== "owner" ? `<span>${ROLE[r.role]} · владелец ${esc(r.owner)}</span>` : ""}
-      ${needsUpdate(r) ? `<span class="pill warn">есть обновление ${esc(S.latest)}</span>` : ""}
-    </div>
-    ${subs.length ? `<div class="subs">${subs.map(p => {
-      const used = p.sub ? (p.sub.Upload||0)+(p.sub.Download||0) : 0, pct = p.sub?.Total ? Math.min(100, used/p.sub.Total*100) : 0;
-      return `<div class="s"><span>${fname(p.name)} <span class="muted">${p.alive}/${p.count}</span></span><span>${esc(subLine(p.sub))}</span></div>${p.sub?.Total ? `<div class="bar"><i class="${pct>85?"hi":""}" style="width:${pct.toFixed(1)}%"></i></div>` : ""}`;
-    }).join("")}</div>` : ""}
-  </a>`;
-}
-async function renderFleet(){
-  clearTimers();
-  const draw = () => {
-    const rs = S.routers, on = rs.filter(r => r.online).length;
-    app.innerHTML = `
-      <div class="fleethero"><div class="txt"><h1>Fleet</h1><p>Роутеры с Nikki + mihomo: статус, прокси-группы, трафик и конфиг — удалённо, без белого IP.</p>
-        <button class="primary" id="addRouter">+ Подключить роутер</button></div><img class="art" src="art.webp" alt="" width="560" height="265"></div>
-      ${rs.length ? `<div class="fleetstats">
-        ${stat("Роутеров", rs.length, "всего в панели", "router", "g-main")}
-        ${stat("В сети", on, on === rs.length ? "все на связи" : "", "on", "g-ok")}
-        ${stat("Не в сети", rs.length - on, rs.length - on ? "агент не подключён" : "нет таких", "off", rs.length - on ? "g-warn" : "g-info")}
-        ${stat("Обновления", rs.filter(needsUpdate).length, S.latest ? `последняя ${esc(S.latest)}` : "", "up", rs.some(needsUpdate) ? "g-amber" : "g-info")}
-      </div>` : ""}
-      ${rs.length ? `<div class="grid">${rs.map(routerCard).join("")}</div>` : `
-      <div class="panel empty">
-        <h2>Подключите первый роутер</h2>
-        <ol>
-          <li>Нажмите «Подключить роутер» и скопируйте команду.</li>
-          <li>Выполните её в SSH на роутере с OpenWrt 24.10 или 25.12. Если <a href="https://github.com/nikkinikki-org/OpenWrt-nikki" target="_blank" rel="noopener">Nikki</a> ещё нет, команда установит и его. Роутер появится здесь через несколько секунд.</li>
-        </ol>
-        <button class="primary" id="addRouter2">Подключить роутер</button>
-      </div>`}`;
-  };
-  try{ S.routers = await get("/api/routers"); }catch(e){ return handleErr(e); }
-  draw();
-  latestFleet().then(v => { if(v && v !== S.latest){ S.latest = v; if(location.hash==="#/"||!location.hash) draw(); } });
-  every(15000, async () => { try{ S.routers = await get("/api/routers"); if(location.hash==="#/" || location.hash==="") draw(); }catch(e){} });
-}
 document.addEventListener("click", e => { if(e.target.closest("#addRouter,#addRouter2")) addRouterDialog(); });
 
 function addRouterDialog(){

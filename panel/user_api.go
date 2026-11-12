@@ -168,6 +168,7 @@ type routerView struct {
 	Status       json.RawMessage `json:"status,omitempty"`
 	StatusAt     time.Time       `json:"status_at"`
 	Info         json.RawMessage `json:"info,omitempty"`
+	Spark        []sample        `json:"spark,omitempty"`
 }
 
 func (a *App) view(s *state, rt *Router, role string) routerView {
@@ -177,7 +178,7 @@ func (a *App) view(s *state, rt *Router, role string) routerView {
 	}
 	return routerView{ID: rt.ID, Name: rt.Name, Notes: rt.Notes, Role: role, Owner: owner, Online: a.online(rt),
 		LastSeen: rt.LastSeen, Created: rt.Created, AgentVersion: rt.AgentVersion, Status: rt.Status,
-		StatusAt: rt.StatusAt, Info: rt.Info}
+		StatusAt: rt.StatusAt, Info: rt.Info, Spark: hist.get(rt.ID)}
 }
 
 func (a *App) listRouters(w http.ResponseWriter, r *http.Request, u *User) {
@@ -277,6 +278,7 @@ func (a *App) deleteRouter(w http.ResponseWriter, r *http.Request, u *User) {
 	a.store.UpdateNow(func(s *state) error {
 		s.deleteRouter(rt.ID)
 		s.audit(u.ID, rt.ID, "router.deleted", rt.Name)
+		hist.drop(rt.ID)
 		return nil
 	})
 	a.store.DeleteConfigs(rt.ID)

@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>nikki-fleet</title>
 <link rel="icon" href="mark.svg" type="image/svg+xml">
-<meta name="theme-color" content="#0b1f4d">
+<meta name="theme-color" content="#070b17">
 <link rel="stylesheet" href="app.css">
-<script>try{const t=localStorage.getItem("nf.theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
+<script>try{const t=localStorage.getItem("nf.theme")||"dark";if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}</script>
 </head>
 <body>
 <header class="top">
@@ -26,6 +26,7 @@
 <script src="starter.js"></script>
 <script src="subcopy.js"></script>
 <script src="app.js"></script>
+<script src="fleet.js"></script>
 <script src="ssh.js"></script>
 </body>
 </html>
