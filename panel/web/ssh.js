@@ -173,7 +173,12 @@ function sshConnect(h, cred, sent){
   ws.binaryType = "arraybuffer";
   const sess = sshSess = {ws, term, fit, connected:false, ctrl:false, alt:false, onResize:null};
   const enc = new TextEncoder();
-  const sendKeys = s => { if(sess.connected && ws.readyState === 1) ws.send(enc.encode(s)); };
+  // large pastes go out in 16 KB pieces (the server takes up to 1 MB per message)
+  const sendKeys = s => {
+    if(!sess.connected || ws.readyState !== 1) return;
+    const b = enc.encode(s);
+    for(let i = 0; i < b.length; i += 16384) ws.send(b.subarray(i, i + 16384));
+  };
   const sendCtl = o => { if(ws.readyState === 1) ws.send(JSON.stringify(o)); };
 
   ws.onopen = () => {

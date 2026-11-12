@@ -358,7 +358,7 @@ func (a *App) sshTerm(w http.ResponseWriter, r *http.Request, u *User) {
 				lastInput.Store(time.Now().UnixNano())
 				select {
 				case in <- p:
-				case <-time.After(10 * time.Second): // ssh side stuck: drop the session
+				case <-time.After(2 * time.Minute): // ssh side stuck: drop the session
 					return
 				}
 				continue
