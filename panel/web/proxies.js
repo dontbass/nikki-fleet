@@ -119,8 +119,9 @@ function tabProxies(body, r){
   function drawProviders(){
     const ps = P.data.providers;
     if(!ps) return `<div class="note">Список подписок доступен после обновления nikki-fleet на роутере до 0.1.9 или новее.</div>`;
-    if(!ps.length) return `<div class="note">В конфиге нет подписок (proxy-providers).</div>`;
-    return ps.map(p => {
+    const add = edit ? `<div class="pxadd"><button class="primary" data-pxadd>+ Добавить подписку</button><span class="small muted">вставьте ссылку — группы создадутся по образцу соседних подписок, конфиг проверится и применится</span></div>` : "";
+    if(!ps.length) return add + `<div class="note">В конфиге нет подписок (proxy-providers).</div>`;
+    return add + ps.map(p => {
       const open = P.open["p:" + p.name] ?? false, alive = p.proxies.filter(n => (P.data.nodes[n]?.d || 0) > 0).length;
       const used = p.sub ? (p.sub.Upload||0) + (p.sub.Download||0) : 0, pct = p.sub?.Total ? Math.min(100, used/p.sub.Total*100) : 0;
       return `<section class="panel pxg">
@@ -130,6 +131,7 @@ function tabProxies(body, r){
           <span class="small muted">обновлена ${ago(p.updated)}${p.sub ? " · " + esc(subLine(p.sub)) : ""}</span>
           <span class="grow"></span>
           ${edit && p.vehicle === "HTTP" ? `<button class="small" data-pxpupd="${esc(p.name)}">↻ обновить</button><button class="small" data-pxcopy="${esc(p.name)}" title="Скопировать подписку со всеми параметрами на другие роутеры">⧉ на роутер…</button>` : ""}
+          ${edit && p.vehicle !== "Compatible" ? `<button class="small danger ghost" data-pxdel="${esc(p.name)}" title="Удалить подписку вместе с её группами">Удалить</button>` : ""}
           <button class="small" data-pxphc="${esc(p.name)}" ${P.testing.has("p:" + p.name) ? "disabled" : ""}>${P.testing.has("p:" + p.name) ? "проверяю…" : "⚡ проверить"}</button>
         </div>
         ${p.sub?.Total ? `<div class="bar"><i class="${pct>85?"hi":""}" style="width:${pct.toFixed(1)}%"></i></div>` : ""}
@@ -194,6 +196,9 @@ function tabProxies(body, r){
       }catch(err){ g.now = prev; draw(); flash(err.message, true); }
       return;
     }
+    if(t.closest("[data-pxadd]")){ subEditDialog(r, "add", null, () => load()); return; }
+    const pd = t.closest("[data-pxdel]");
+    if(pd){ subEditDialog(r, "remove", pd.dataset.pxdel, () => load()); return; }
     const pc = t.closest("[data-pxcopy]");
     if(pc){ subCopyDialog(r, pc.dataset.pxcopy).catch(err => flash(err.message, true)); return; }
     const pu = t.closest("[data-pxpupd]");

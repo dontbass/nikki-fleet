@@ -137,7 +137,7 @@ const COMMANDS = {
 	'profile.test': a => ops.test_config(a?.content),
 	'profile.write': a => {
 		const r = ops.write_profile({ kind: a_kind(a), name: a?.name, content: a?.content,
-			activate: !!a?.activate, reload: a?.reload !== false });
+			activate: !!a?.activate, reload: a?.reload !== false, expect: a?.expect });
 		if (r.ok && r.reloaded && r.backup)
 			set_pending({ kind: a_kind(a), name: a?.name, backup: r.backup });
 		return r;

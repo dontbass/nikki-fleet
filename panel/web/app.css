@@ -532,3 +532,26 @@ button.glow:hover{transform:translateY(-1px);box-shadow:0 0 0 1px rgba(255,255,2
 :root[data-theme="light"] .rc .spark .area{fill:color-mix(in srgb,var(--cyan) 12%,transparent)}
 @media (max-width:640px){.top .user .nl{display:none}}
 .fleethero.slim{display:flex;flex-wrap:wrap;justify-content:space-between;min-height:0;padding:22px 26px}.fleethero.slim h1{font-size:30px}.fleethero.slim .small{color:rgba(230,236,255,.85)}
+
+/* add / remove a subscription */
+.pxadd{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+button.danger.ghost{background:transparent;color:var(--warn);border-color:color-mix(in srgb,var(--warn) 35%,transparent)}
+button.danger.ghost:hover{background:color-mix(in srgb,var(--warn) 10%,transparent)}
+.sedet{margin:8px 0;border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--soft)}
+.sedet summary{cursor:pointer;font-size:13px;font-weight:600}
+.segrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 12px;margin-top:8px}
+@media (max-width:520px){.segrid{grid-template-columns:1fr}}
+.seplan ul{margin:8px 0 10px;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.seplan li.warn{color:var(--amber)}
+.seplan .ok{color:var(--ok)}
+.sediff{font-family:var(--f-mono);font-size:11.5px;max-height:300px;overflow:auto;margin-top:8px;background:var(--code-bg);color:var(--code-fg);border-radius:8px;padding:6px 0}
+.sediff .dl{white-space:pre;padding:0 10px}
+.sediff .dl.add{background:rgba(62,224,143,.15);color:#8ff0bd}
+.sediff .dl.del{background:rgba(255,107,129,.15);color:#ffb3c0}
+.sediff .dl.gap{color:#6c7896}
+.steps{list-style:none;padding:0;margin:6px 0 10px;display:flex;flex-direction:column;gap:8px}
+.steps .st{display:flex;gap:10px;align-items:center;color:var(--muted)}
+.steps .st i{font-style:normal;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:var(--soft);border:1px solid var(--line);font-size:12px;font-weight:800}
+.steps .st.ok{color:var(--fg)}.steps .st.ok i{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok);border-color:transparent}
+.steps .st.bad i{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+.steps .st.mid i{background:color-mix(in srgb,var(--amber) 18%,transparent);color:var(--amber)}

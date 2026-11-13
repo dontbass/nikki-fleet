@@ -207,7 +207,7 @@ async function subCopyDialog(src, provName){
             : `новая подписка «${esc(sum.name)}»; группы: ${sum.groups.map(esc).join(", ") || "—"}${sum.parents.filter(x => !sum.pools.includes(x)).length ? "; в " + sum.parents.filter(x => !sum.pools.includes(x)).map(esc).join(", ") : ""}${sum.pools.length ? "; в общих группах: " + sum.pools.map(esc).join(", ") : ""}${sum.rules ? `; правил: ${sum.rules}` : ""}`;
           const line = txt + (t.kind === "subscription" ? ` <span class="err">— активный профиль это подписка Nikki: при её обновлении изменения могут перезаписаться</span>` : "");
           res(id, line);
-          out.push({id, kind:t.kind, name:t.name, content:scDump(doc), line});
+          out.push({id, kind:t.kind, name:t.name, content:scDump(doc), expect:t.content, line});
         }catch(e){ res(id, esc(e.message), "err"); }
       }
       return out;
@@ -228,9 +228,10 @@ async function subCopyDialog(src, provName){
         const st = (h, c) => res(p.id, p.line + "<br>" + h, c);
         st("сохраняю и проверяю…");
         try{
-          const d = await cmd(p.id, "profile.write", {kind:p.kind, name:p.name, content:p.content, activate:false, reload:true});
+          const d = await cmd(p.id, "profile.write", {kind:p.kind, name:p.name, content:p.content, expect:p.expect, activate:false, reload:true});
           if(d.ok){ ok++; st(d.nikki_disabled ? "сохранено ✓ (Nikki выключен — применится при включении)" : "готово ✓ — mihomo перезапущен", "ok"); }
           else st(esc(d.stage === "test" ? "mihomo не принял конфиг, ничего не изменено: " + String(d.output || "").split("\n").filter(Boolean).slice(-2).join(" ")
+            : d.stage === "conflict" ? "профиль на роутере изменился после проверки — нажмите «Показать изменения» ещё раз"
             : d.stage === "reload" ? "mihomo не запустился с новым конфигом — возвращена прежняя версия" : (d.error || "ошибка")), "err");
         }catch(err){ st(esc(err.message), "err"); }
       }

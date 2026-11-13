@@ -5,7 +5,7 @@
 
 import { readfile, writefile, popen, stat, lsdir, mkdir, unlink, rename, chmod } from 'fs';
 
-export const VERSION = '0.1.32';
+export const VERSION = '0.1.33';
 
 // NF_ROOT lets tests run against a fake filesystem root.
 const ROOT = getenv('NF_ROOT') ?? '';
@@ -385,6 +385,11 @@ export function write_profile(opts) {
 		return { ok: false, stage: 'validate', error: 'empty config' };
 	if (length(content) > MAX_CONFIG)
 		return { ok: false, stage: 'validate', error: 'config is too large' };
+
+	// optimistic lock: the panel says what it read; if the profile changed since
+	// (another editor, the configurator), nothing is written
+	if (type(opts.expect) == 'string' && (readfile(path) ?? '') != opts.expect)
+		return { ok: false, stage: 'conflict', error: 'the profile changed on the router since it was read' };
 
 	if (opts.test !== false) {
 		const t = test_config(content);
